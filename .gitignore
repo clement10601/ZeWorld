@@ -1,0 +1,4 @@
+.godot/
+__pycache__/
+.pytest_cache/
+*.import
