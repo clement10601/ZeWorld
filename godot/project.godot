@@ -1,0 +1,7 @@
+; ZeWorld 引擎的 Godot 測試專案。遊戲請引用 addons/zeworld，不要依賴這個專案。
+config_version=5
+
+[application]
+
+config/name="ZeWorld Engine Tests"
+config/features=PackedStringArray("4.4")

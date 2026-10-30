@@ -1,0 +1,5 @@
+{
+  "tiers": ["novice", "adept", "master"],
+  "karma_axes": ["order", "mercy"],
+  "times_of_day": ["day", "night"]
+}
