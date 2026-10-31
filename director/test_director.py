@@ -196,3 +196,15 @@ def test_restock_request_sets_region(tmp_path):
     sent = json.loads(d.llm.calls[-1][1][-1]["content"])
     assert sent["request"]["region"] == "region.test_town"
     assert "region.test_town" in prompts.catalog_text(GAME["catalog"])
+
+
+def test_tag_gate_and_expiry_are_enforced(tmp_path):
+    d = Director(GAME, FakeLLM(director=lambda m: REPLY), out_dir=tmp_path)
+    gate = [{"type": "tier_up", "to": "adept"}]
+    pack = d.generate(STATE, "save.g", tag="heart_demon", gate=gate, expires_after_days=1)
+    assert pack["meta"]["request_tag"] == "heart_demon"
+    assert pack["trigger"]["all"][0] == gate[0]
+    assert pack["trigger"]["expires_after_days"] == 1
+    assert validate.validate_pack(pack, GAME["ruleset"], GAME["catalog"]) == []
+    sent = json.loads(d.llm.calls[-1][1][-1]["content"])["request"]
+    assert sent["required_trigger"] == gate and sent["expires_after_days"] == 1

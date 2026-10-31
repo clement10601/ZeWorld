@@ -27,8 +27,10 @@ func _ready() -> void:
 		base_url = env
 
 
-func request_pack(state, followup: Dictionary = {}, hint: String = "", region: String = "") -> void:
-	_generate(state, followup, hint, region, Callable())
+## options（選用）：tag 寫進 meta.request_tag，gate 是加在觸發器最前面的條件陣列，
+## expires_after_days 是進池後的有效天數。都由引擎強制寫入，不靠模型自己寫。
+func request_pack(state, followup: Dictionary = {}, hint: String = "", region: String = "", options: Dictionary = {}) -> void:
+	_generate(state, followup, hint, region, Callable(), options)
 
 
 ## 補貨排程：玩家目前地區、階級可用的內容包少於 target 時，請導演補到 target。
@@ -53,8 +55,11 @@ func restocking(region: String) -> int:
 	return int(_restocking.get(region, 0))
 
 
-func _generate(state, followup: Dictionary, hint: String, region: String, done: Callable) -> void:
+func _generate(state, followup: Dictionary, hint: String, region: String, done: Callable, options: Dictionary = {}) -> void:
 	var body := {"state": state.to_dict(), "save_id": state.save_id}
+	for key in ["tag", "gate", "expires_after_days"]:
+		if options.has(key):
+			body[key] = options[key]
 	if not followup.is_empty():
 		body["followup"] = followup
 	if hint != "":

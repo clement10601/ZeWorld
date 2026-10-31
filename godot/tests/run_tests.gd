@@ -31,6 +31,7 @@ func _initialize() -> void:
 		"test_save_and_load",
 		"test_history_records_choices",
 		"test_region_filter_and_stock",
+		"test_generated_pack_expires",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -294,3 +295,20 @@ func test_region_filter_and_stock() -> void:
 	s.seen_packs.erase("pack.test.rescue")
 	s.tier_index = 2
 	expect(PackPool.stock(p, s, "region.test_town").is_empty(), "pack outside tier is not stock")
+
+
+func test_generated_pack_expires() -> void:
+	var s = rescue_ready_state()
+	var rescue: Dictionary = pack("pack.test.rescue").duplicate(true)
+	rescue["trigger"]["expires_after_days"] = 1
+	var p := [rescue]
+	expect(not s.is_expired(rescue), "pack without arrival never expires")
+	s.note_arrival(rescue["id"])
+	s.note_arrival(rescue["id"])
+	expect(TriggerJudge.pick(p, s)["id"] == rescue["id"], "fresh pack fires on its arrival day")
+	expect(PackPool.stock(p, s, "").size() == 1, "fresh pack counts as stock")
+	s.day += 1
+	expect(s.is_expired(rescue), "pack expires after its days")
+	expect(TriggerJudge.pick(p, s).is_empty(), "expired pack does not fire")
+	expect(PackPool.stock(p, s, "").is_empty() and PackPool.expired(p, s).size() == 1, "expired pack is not stock")
+	expect(s.to_dict()["pack_arrivals"].has(rescue["id"]), "arrivals are saved")

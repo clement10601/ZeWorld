@@ -39,6 +39,11 @@ func _run() -> void:
 	var line: Array = await client.line_rewritten
 	expect(line == ["g1", "Well met again."], "rewritten line arrives")
 
+	client.request_pack(state, {}, "", "", {"tag": "encounter", "expires_after_days": 1, "gate": [{"type": "tier_at_least", "tier": "novice"}]})
+	var tagged: Array = await client.pack_generated
+	expect(tagged[0]["meta"]["request_tag"] == "encounter", "request tag comes back on the pack")
+	expect(tagged[0]["trigger"]["expires_after_days"] == 1 and tagged[0]["trigger"]["all"][0]["type"] == "tier_at_least", "gate and expiry written by the engine")
+
 	state.region = "region.test_town"
 	expect(client.restock(state, [], 2) == 2, "restock asks for the shortfall")
 	expect(client.restock(state, [], 2) == 0, "in-flight requests count as stock")

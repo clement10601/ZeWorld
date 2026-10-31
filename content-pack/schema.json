@@ -128,6 +128,11 @@
           "type": "string",
           "description": "單機版為存檔 id；空值代表通用內容包"
         },
+        "request_tag": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "導演生成時由引擎寫入：遊戲送請求時給的標籤（例如 encounter、heart_demon），讓遊戲認得這是哪一種請求的產物"
+        },
         "created_at": {
           "type": "string",
           "format": "date-time"
@@ -433,7 +438,7 @@
         "expires_after_days": {
           "type": "integer",
           "minimum": 1,
-          "description": "個人化內容包過期後不再觸發"
+          "description": "內容包進池（WorldState.note_arrival）後幾天內有效；過期不再觸發也不算存貨。沒記錄進池日的內容包不會過期"
         }
       }
     },
