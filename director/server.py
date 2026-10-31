@@ -1,6 +1,6 @@
 """導演 HTTP 服務（只用標準函式庫）。遊戲端的 director_client.gd 連這裡。
 
-POST /v1/packs/generate   {"state": {...}, "save_id": "...", "followup": {...}?, "hint": "..."?}
+POST /v1/packs/generate   {"state": {...}, "save_id": "...", "followup": {...}?, "hint": "..."?, "region": "..."?}
                           -> 200 {"pack": {...}} | 422 {"error": "...", "details": [...]} | 502 LLM 失敗
 POST /v1/dialogue/rewrite {"text": "...", "node_id": "...", "pack": {...}, "state": {...}}
                           -> 200 {"text": "...", "fallback": bool}
@@ -36,7 +36,7 @@ def make_server(director, host="127.0.0.1", port=8765):
             if self.path == "/v1/packs/generate":
                 try:
                     pack = director.generate(body.get("state", {}), body.get("save_id", ""),
-                                             body.get("followup"), body.get("hint"))
+                                             body.get("followup"), body.get("hint"), body.get("region"))
                 except DirectorError as e:
                     code = 422 if e.errors else 502
                     return self._send(code, {"error": str(e), "details": e.errors})

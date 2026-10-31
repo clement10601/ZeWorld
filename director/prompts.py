@@ -42,6 +42,10 @@ def catalog_text(catalog):
     lines.append("Actor templates:")
     for tid, t in catalog["actor_templates"].items():
         lines.append(f"- {tid}: {t.get('name', '')} — {t.get('description', '')}")
+    if catalog.get("regions"):
+        lines.append("Regions (meta.region; a pack set in a region uses only that region's chunks):")
+        for rid, r in catalog["regions"].items():
+            lines.append(f"- {rid}: {r.get('name', '')} — {r.get('description', '')}; chunks={r.get('chunks', [])}")
     lines.append("Loot tables (give_loot.tier picks common/rare/epic):")
     for lid in catalog["loot"]:
         lines.append(f"- {lid}")

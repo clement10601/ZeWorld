@@ -187,3 +187,12 @@ def test_profile_carries_recent_history_and_prompt_drops_raw_copy():
     req = json.loads(msgs[-1]["content"])
     assert "history" not in req["world_state"] and len(req["player_profile"]["history"]) == 8
     assert "phone" in msgs[0]["content"]
+
+
+def test_restock_request_sets_region(tmp_path):
+    d = Director(GAME, FakeLLM(director=lambda m: REPLY), out_dir=tmp_path)
+    pack = d.generate(STATE, "save.r", region="region.test_town")
+    assert pack["meta"]["region"] == "region.test_town"
+    sent = json.loads(d.llm.calls[-1][1][-1]["content"])
+    assert sent["request"]["region"] == "region.test_town"
+    assert "region.test_town" in prompts.catalog_text(GAME["catalog"])

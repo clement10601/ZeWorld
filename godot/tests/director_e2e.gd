@@ -39,7 +39,21 @@ func _run() -> void:
 	var line: Array = await client.line_rewritten
 	expect(line == ["g1", "Well met again."], "rewritten line arrives")
 
+	state.region = "region.test_town"
+	expect(client.restock(state, [], 2) == 2, "restock asks for the shortfall")
+	expect(client.restock(state, [], 2) == 0, "in-flight requests count as stock")
+	var first: Array = await client.pack_generated
+	expect(first[0]["meta"]["region"] == "region.test_town" and first[1].is_empty(), "restocked pack is set in the region")
+	await client.pack_generated
+	await process_frame
+	expect(client.restocking("region.test_town") == 0, "in-flight count drops when packs arrive")
+
 	client.base_url = "http://127.0.0.1:9"
+	expect(client.restock(state, [], 1) == 1, "restock retries while stock is short")
+	await client.pack_failed
+	await process_frame
+	expect(client.restock(state, [], 1) == 0, "failed restock cools down")
+
 	client.request_pack(state)
 	var failed: Array = await client.pack_failed
 	expect(failed[1] == "director unreachable", "unreachable director reported")

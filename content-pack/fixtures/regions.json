@@ -1,0 +1,5 @@
+{
+  "_comment": "地區目錄：內容包的 meta.region 必須在這裡，且只能用該地區的區塊。",
+  "region.test_town": { "name": "Town", "description": "A market town and the woods around it.", "chunks": ["chunk.test_street", "chunk.test_woods"] },
+  "region.test_trial": { "name": "Mirror trial", "description": "The trial grounds behind the mirror gate.", "chunks": ["chunk.test_entry", "chunk.test_arena"] }
+}

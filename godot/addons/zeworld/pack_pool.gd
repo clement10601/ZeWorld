@@ -43,6 +43,20 @@ static func for_save(pool: Array, save_id: String) -> Array:
 	return pool.filter(func(p): return p["meta"].get("personalized_for", "") in ["", save_id])
 
 
+## 池子裡還能給這位玩家用的內容包：沒玩過（或可重複）、階級範圍含目前階級、屬於 region。
+## 補貨排程用它判斷某地區還剩多少存貨；不看觸發條件，那是判斷器的事。
+static func stock(pool: Array, state, region: String) -> Array:
+	return pool.filter(func(p):
+		var meta: Dictionary = p["meta"]
+		if meta.get("region", "") != region:
+			return false
+		if state.seen_packs.has(p["id"]) and p["trigger"].get("once", true):
+			return false
+		var lo: int = state.tier_index_of(meta["tier_range"]["min"])
+		var hi: int = state.tier_index_of(meta["tier_range"]["max"])
+		return state.tier_index >= lo and state.tier_index <= hi)
+
+
 ## 把導演產出的內容包存進資料夾（例如 user://generated），下次啟動用 load_dir 讀回。
 static func save_pack(pack: Dictionary, dir_path: String) -> bool:
 	DirAccess.make_dir_recursive_absolute(dir_path)

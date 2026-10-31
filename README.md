@@ -29,7 +29,9 @@
   "chunks": "content/chunks.json",
   "loot": "content/loot.json",
   "actor_templates": "content/actors.json",
+  "regions": "content/regions.json",
   "style": "content/style.md",
+  "banned_words": "content/banned_words.txt",
   "packs": "content/packs"
 }
 ```
@@ -37,7 +39,10 @@
 - `chunks`：`{區塊 id: {name, width, tags, points: {點 id: x}}}`。內容包的地圖、地點、`enter_map` 標籤只能用這裡有的。
 - `loot`：`{掉落表 id: {common, rare, epic}}`。
 - `actor_templates`：`{模板 id: {name, description}}`。導演只能用這些模板。
+- `regions`（選用）：`{地區 id: {name, description, chunks: [區塊 id]}}`。內容包的 `meta.region` 必須在這裡，地圖只能用該地區的區塊。
+- `banned_words`（選用）：文字檔，一行一個禁用詞（`#` 開頭是註解）。玩家看得到的文字含有禁用詞就驗證失敗。
 - `ruleset` 可加 `karma_labels: {軸: [負向名稱, 正向名稱]}`，玩家側寫會用來描述傾向。
+- `ruleset` 可加獎勵上限：`loot_caps`、`exp_caps`（`{階級: 最高檔次}`，依內容包 `tier_range.min` 套用，沒列的階級沿用較低階級）、`max_loot_per_outcome`（每個結局最多幾個 `give_loot`）。
 
 `python content-pack/validate.py --game path/to/zeworld.json` 會檢查清單裡的所有內容包。
 
@@ -65,6 +70,8 @@ python -m director serve --game ../Zetas/zeworld.json --out ../Zetas/.generated
 沒有模型時可用固定回覆離線跑：`python -m director serve --game ... --fake-pack some_pack.json --fake-line "..."`。
 
 - `POST /v1/packs/generate`：送世界狀態與後續劇情請求，回傳通過驗證的內容包。引擎會改寫 id、標記 `personalized_for`，並把「等 after_days 天」的條件加進觸發器（執行器在 `request_followup` 時會立 `followup:<內容包 id>` 旗標）。
+- 帶 `region` 的請求是補貨：導演把內容包設在該地區（引擎強制寫入 `meta.region`）。
+- 內容包結束時執行器會寫一筆因果紀錄到 `state.history`（標題、結局、玩家選了什麼），導演側寫帶最近 8 筆。
 - `POST /v1/dialogue/rewrite`：依 NPC 設定、對玩家的記憶與關係、上一句對白改寫一句台詞；失敗、空白、過長（超過原句 1.5 倍）或繁中遊戲混進簡體字都退回原句。模型多加的旁白（「某某冷笑道：」）與引號會先去掉。
 - 遊戲語言是繁體中文時（`language` 以 `zh-Hant` 開頭或含「繁體」），內容包裡的簡體字會當成驗證錯誤丟回導演重寫。字表在 `director/data/zh_simplified_only.txt`（由 OpenCC 產生，排除「里、伙、群」這類繁中也用的字）。
 - Claude API 的系統提示與範例包有標提示快取，連續生成時大部分輸入 token 走快取價。
@@ -106,3 +113,14 @@ if not pack.is_empty():
     runner.line_shown.connect(_on_line)
     runner.start()
 ```
+
+### 補貨排程
+
+`WorldState.region` 是玩家所在地區。標了 `meta.region` 的內容包只在該地區觸發（`region` 為空時不篩）。
+`PackPool.stock(pool, state, region)` 回傳該地區、目前階級還沒玩過的內容包。在適當時機（進地圖、換日）呼叫：
+
+```gdscript
+director.restock(state, PackPool.for_save(pool, state.save_id), 3)  # 不足 3 個就請導演補
+```
+
+送出中的請求會算進存貨，不會重複請求；失敗後該地區冷卻 `restock_cooldown_sec`（預設 120 秒）。補來的內容包走 `pack_generated`。
