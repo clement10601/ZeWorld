@@ -9,6 +9,7 @@ from . import prompts
 from ._validate import validate
 from .llm import LLMError
 from .profile import build_profile, npc_view
+from .script import leaks_instructions, simplified_chars
 
 
 class DirectorError(RuntimeError):
@@ -27,6 +28,41 @@ def extract_json(text):
     if not isinstance(obj, dict):
         raise ValueError("reply is not a JSON object")
     return obj
+
+
+def pack_text(pack):
+    """內容包裡玩家看得到的字：標題、摘要、角色名、對白、選項、目標。"""
+    meta = pack.get("meta") if isinstance(pack.get("meta"), dict) else {}
+    out = [str(meta.get("title", "")), str(meta.get("summary", ""))]
+    out += [str(a.get("name", "")) + str(a.get("title", "")) for a in pack.get("actors", []) if isinstance(a, dict)]
+    nodes = pack.get("dialogue", {}).get("nodes", {}) if isinstance(pack.get("dialogue"), dict) else {}
+    for n in nodes.values() if isinstance(nodes, dict) else []:
+        if isinstance(n, dict):
+            out.append(str(n.get("text", "")))
+            out += [str(c.get("text", "")) for c in n.get("choices", []) if isinstance(c, dict)]
+    out += [str(st.get("objective", "")) for st in pack.get("stages", []) if isinstance(st, dict)]
+    return "\n".join(out)
+
+
+def previous_line(pack, node_id):
+    """對話中接到 node_id 的上一句（next 或選項指過來的），給台詞改寫當上下文。"""
+    nodes = pack.get("dialogue", {}).get("nodes", {})
+    names = {a["id"]: a.get("name", a["id"]) for a in pack.get("actors", [])}
+    for nid, n in nodes.items():
+        if n.get("next") == node_id or any(c.get("next") == node_id for c in n.get("choices", [])):
+            return {"speaker": names.get(n.get("speaker"), n.get("speaker")), "text": n.get("text", "")}
+    return None
+
+
+def clean_line(reply, actor):
+    """去掉模型偶爾加上的旁白、講者名與引號，只留台詞本身。"""
+    line = reply.strip().splitlines()[0].strip() if reply.strip() else ""
+    if "「" in line:  # 「白芷冷笑一聲：「……」」這類，取引號裡的話
+        line = line[line.index("「") + 1:]
+    head, sep, rest = line.partition("：")
+    if sep and len(head) <= 16 and (actor.get("name", "\0") in head or head.endswith(("道", "說", "曰"))):
+        line = rest
+    return line.strip().strip("\"'「」『』“”").replace("「", "").replace("」", "").strip()
 
 
 def followup_gate(followup):
@@ -80,6 +116,9 @@ class Director:
             try:
                 pack = self.finalize(extract_json(reply), save_id, followup, taken)
                 errors = validate.validate_pack(pack, self.game["ruleset"], self.game["catalog"])
+                bad = simplified_chars(pack_text(pack), self.game["language"])
+                if bad:
+                    errors.append(prompts.script_message(bad))
             except ValueError as e:
                 errors = [f"reply is not valid JSON: {e}"]
             if not errors:
@@ -127,14 +166,18 @@ class Director:
         profile = build_profile(state, self.game["ruleset"])
         npc = npc_view(profile, actor.get("memory_key", ""))
         try:
-            reply = self.llm.chat(prompts.rewrite_messages(self.game, text, actor, npc, profile),
-                                  role="dialogue", temperature=0.8, max_tokens=200)
+            messages = prompts.rewrite_messages(self.game, text, actor, npc, profile, previous_line(pack, node_id))
+            reply = self.llm.chat(messages, role="dialogue", temperature=0.8, max_tokens=200)
         except LLMError as e:
             return {"text": text, "fallback": True, "reason": str(e)}
-        line = reply.strip().splitlines()[0].strip() if reply.strip() else ""
-        line = line.strip("\"'「」『』“”")
+        line = clean_line(reply, actor)
         if not line:
             return {"text": text, "fallback": True, "reason": "empty reply"}
-        if len(line) > max(2 * len(text), len(text) + 40):
-            return {"text": text, "fallback": True, "reason": "reply too long"}
+        if len(line) > prompts.rewrite_limit(text):
+            return {"text": text, "fallback": True, "reason": "reply too long", "rejected": line}
+        if leaks_instructions(line) and not leaks_instructions(text):
+            return {"text": text, "fallback": True, "reason": "reply talks about the task", "rejected": line}
+        bad = simplified_chars(line, self.game["language"])
+        if bad:
+            return {"text": text, "fallback": True, "reason": "simplified characters: " + "".join(bad), "rejected": line}
         return {"text": line, "fallback": False}

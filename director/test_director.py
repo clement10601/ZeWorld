@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from director._validate import validate
-from director.core import Director, DirectorError, extract_json
+from director.core import Director, DirectorError, clean_line, extract_json, previous_line
 from director.llm import FakeLLM
 from director.profile import build_profile
 from director.server import make_server
@@ -94,6 +94,57 @@ def test_rewrite_line_and_fallbacks():
     assert d.rewrite_line(text, speaker_node, RESCUE, STATE)["text"] == text
     # LLM 掛掉也退回原句
     assert Director(GAME, FakeLLM()).rewrite_line(text, speaker_node, RESCUE, STATE)["text"] == text
+
+
+def test_clean_line_strips_narration_and_quotes():
+    actor = {"name": "白芷"}
+    assert clean_line("白芷冷笑一聲，眼神如刀：「這筆帳，青丘記著。", actor) == "這筆帳，青丘記著。"
+    assert clean_line("厲崇冷聲道：交出狐妖。", {"name": "韓錚"}) == "交出狐妖。"
+    assert clean_line("恩公，小心。\n（她退後一步）", actor) == "恩公，小心。"
+    # 台詞本身有冒號、但前面不是講者或「道」就保留
+    assert clean_line("記住一句話：人心難測。", actor) == "記住一句話：人心難測。"
+
+
+def test_previous_line_is_sent_as_context():
+    prev = previous_line(RESCUE, "a2")
+    assert prev == {"speaker": "Stranger", "text": "You helped me before."}
+    llm = FakeLLM(dialogue=["Thanks."])
+    Director(GAME, llm).rewrite_line(RESCUE["dialogue"]["nodes"]["a2"]["text"], "a2", RESCUE, STATE)
+    ctx = json.loads(llm.calls[0][1][-1]["content"])
+    assert ctx.get("line_just_before") == prev
+    assert list(ctx)[-1] == "authored_line"
+
+
+ZH_GAME = dict(GAME, language="zh-Hant（繁體中文）")
+
+
+def test_simplified_line_falls_back_in_traditional_game():
+    d = Director(ZH_GAME, FakeLLM(dialogue=["这位道友，听说你来了。", "這位道友，聽說你來了。"]))
+    text = RESCUE["dialogue"]["nodes"]["a1"]["text"]
+    r = d.rewrite_line(text, "a1", RESCUE, STATE)
+    assert r["fallback"] is True and r["text"] == text and "这" in r["reason"]
+    assert d.rewrite_line(text, "a1", RESCUE, STATE)["fallback"] is False
+    assert "Traditional Chinese" in d.llm.calls[0][1][0]["content"]
+    # 英文遊戲不加繁體規則
+    llm = FakeLLM(dialogue=["Hi."])
+    Director(GAME, llm).rewrite_line(text, "a1", RESCUE, STATE)
+    assert "Traditional" not in llm.calls[0][1][0]["content"]
+
+
+def test_reply_about_the_task_falls_back():
+    d = Director(ZH_GAME, FakeLLM(dialogue=["要改寫的是她的台詞，內容不能增減。"]))
+    text = "恩公，鎮妖司的人下山了，你快走吧。"
+    r = d.rewrite_line(text, "a1", RESCUE, STATE)
+    assert r["fallback"] is True and r["text"] == text and r["reason"] == "reply talks about the task"
+
+
+def test_simplified_pack_is_sent_back_for_repair():
+    bad = json.loads(REPLY)
+    bad["meta"]["title"] = "山贼来了"
+    llm = FakeLLM(director=[json.dumps(bad, ensure_ascii=False), REPLY])
+    Director(ZH_GAME, llm).generate(STATE)
+    assert len(llm.calls) == 2
+    assert "贼" in llm.calls[1][1][-1]["content"] and "Traditional" in llm.calls[1][1][-1]["content"]
 
 
 def test_http_server_round_trip():

@@ -2,6 +2,7 @@
 import json
 
 from ._validate import validate
+from .script import is_traditional
 
 DIRECTOR_RULES = """You are the event director of a game built on the ZeWorld engine.
 Write ONE new content pack as a single JSON object that matches the JSON Schema below. Output only the JSON, no prose, no code fences.
@@ -70,18 +71,37 @@ def repair_message(errors):
             + "\n- ".join(errors[:20]))
 
 
-REWRITE_RULES = """You voice one NPC line in a game. Rewrite the authored line so it fits this player, in {language}.
-Keep the same meaning, facts and intent. Do not add promises, items, names or plot the authored line does not have.
-Reply with the line only: one or two sentences, no quotes, no speaker name."""
+REWRITE_RULES = """You voice one NPC line in a game. Rewrite the authored line so it sounds like this speaker talking to this particular player, in {language}.
+Hard rules:
+- Keep exactly the same facts, intent and outcome. Never swap or blur who did what to whom (who attacked, who saved, who betrayed).
+- Add nothing the authored line does not say: no new facts, promises, demands, items, names or places. The NPC's memories, the relation and the player's karma only colour tone and word choice; refer to a remembered event only if the authored line already refers to it.
+- Output only the spoken words, one or two sentences: no speaker name, no narration such as "she said coldly", no quotation marks or brackets.
+- Keep it about as long as the authored line, never longer than {max_chars} characters.{script_rule}"""
+
+TRADITIONAL_RULE = "\n- Write Traditional Chinese characters only (繁體字, Taiwan usage). Never use Simplified characters."
 
 
-def rewrite_messages(game, text, actor, npc, profile):
+def rewrite_limit(text):
+    """改寫後台詞的長度上限，core 也用它判斷要不要退回原句。"""
+    return max(int(len(text) * 1.5), len(text) + 12)
+
+
+def rewrite_messages(game, text, actor, npc, profile, previous=None):
     ctx = {
         "speaker": {k: actor.get(k) for k in ("name", "title", "persona") if actor.get(k)},
         "what_this_npc_remembers_about_player": npc["memories"],
         "relation_to_player": npc["relation"],
         "player": {"tier": profile["tier"], "karma": profile["karma"]},
-        "authored_line": text,
     }
-    return [{"role": "system", "content": REWRITE_RULES.format(language=game["language"])},
+    if previous:
+        ctx["line_just_before"] = previous
+    ctx["authored_line"] = text
+    rules = REWRITE_RULES.format(language=game["language"], max_chars=rewrite_limit(text),
+                                 script_rule=TRADITIONAL_RULE if is_traditional(game["language"]) else "")
+    return [{"role": "system", "content": rules},
             {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]
+
+
+def script_message(chars):
+    return ("Some player-facing text uses Simplified Chinese characters: " + "".join(chars)
+            + ". The game is in Traditional Chinese. Replace them with their Traditional forms.")
