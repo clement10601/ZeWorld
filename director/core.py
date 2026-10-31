@@ -115,7 +115,8 @@ class Director:
                 raise DirectorError(f"LLM call failed: {e}") from e
             try:
                 pack = self.finalize(extract_json(reply), save_id, followup, taken)
-                errors = validate.validate_pack(pack, self.game["ruleset"], self.game["catalog"])
+                errors = validate.validate_pack(pack, self.game["ruleset"], self.game["catalog"],
+                                                self.game.get("banned_words", ()))
                 bad = simplified_chars(pack_text(pack), self.game["language"])
                 if bad:
                     errors.append(prompts.script_message(bad))

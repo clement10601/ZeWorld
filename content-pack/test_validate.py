@@ -93,3 +93,58 @@ def test_unknown_map_tag_template_and_loot_rejected():
         p["outcomes"]["on_complete"][3]["loot_table"] = "loot.nope"
     errs = catalog_errors(mutate)
     assert len(errs) == 3, errs
+
+
+CAPPED = dict(RULESET, loot_caps={"novice": "common", "master": "epic"}, exp_caps={"novice": "small"},
+              max_loot_per_outcome=1)
+
+
+def test_loot_cap_follows_lowest_tier():
+    errs = validate.validate_pack(copy.deepcopy(RESCUE), CAPPED)
+    assert any("rare" in e and "common" in e for e in errs)
+    pack = copy.deepcopy(RESCUE)
+    pack["meta"]["tier_range"]["min"] = "adept"  # adept 沒列，沿用 novice 的上限
+    assert any("rare" in e for e in validate.validate_pack(pack, CAPPED))
+    pack["meta"]["tier_range"]["min"] = pack["meta"]["tier_range"]["max"] = "master"
+    assert not [e for e in validate.validate_pack(pack, CAPPED) if "掉落" in e]
+
+
+def test_exp_cap_and_loot_count():
+    pack = copy.deepcopy(RESCUE)
+    pack["outcomes"]["on_complete"] += [{"type": "grant_exp", "amount": "large"},
+                                        {"type": "give_loot", "loot_table": "loot.test", "tier": "common"}]
+    errs = validate.validate_pack(pack, CAPPED)
+    assert any("large" in e for e in errs)
+    assert any("give_loot 有 2 個" in e for e in errs)
+
+
+def test_no_caps_means_no_balance_errors():
+    assert validate.validate_pack(copy.deepcopy(RESCUE), RULESET) == []
+
+
+def test_banned_words_found_in_any_text():
+    pack = copy.deepcopy(RESCUE)
+    node = next(iter(pack["dialogue"]["nodes"].values()))
+    node["text"] += " phone"
+    pack["stages"][0]["objective"] += " laser"
+    errs = validate.validate_pack(pack, RULESET, banned_words=["phone", "laser", "absent"])
+    assert len(errs) == 2 and "phone" in errs[0] + errs[1] and "laser" in errs[0] + errs[1]
+    assert "absent" not in " ".join(errs)
+
+
+def test_walk_text_covers_player_facing_fields():
+    places = [w for w, _ in validate.walk_text(RESCUE)]
+    assert "meta.title" in places and any(p.startswith("dialogue") for p in places)
+    assert any(p.startswith("stage") for p in places)
+
+
+def test_manifest_banned_words_file(tmp_path):
+    for f in FIX.iterdir():
+        if f.is_file():
+            (tmp_path / f.name).write_bytes(f.read_bytes())
+    (tmp_path / "banned.txt").write_text("# 註解\nphone\n\n laser \n", encoding="utf-8")
+    m = json.loads((FIX / "zeworld.json").read_text(encoding="utf-8"))
+    m["banned_words"] = "banned.txt"
+    m["packs"] = str(FIX / "packs")
+    (tmp_path / "zeworld.json").write_text(json.dumps(m), encoding="utf-8")
+    assert validate.load_game(tmp_path / "zeworld.json")["banned_words"] == ["phone", "laser"]

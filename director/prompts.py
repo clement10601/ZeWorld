@@ -12,7 +12,8 @@ Rules:
 - Use only tier names, karma axes and times of day from the ruleset. meta.tier_range must include the player's current tier.
 - Use only map chunks, points, map tags, actor templates and loot tables from the catalog. Points in map.points and map.spawn must belong to the chunks you choose.
 - The trigger must be reachable from the player's current state in normal play (do not require flags nobody sets). Set trigger.once to true.
-- Continue the story the player has actually lived: react to their karma, relations, memories and flags. A recurring NPC keeps the same memory_key.
+- Continue the story the player has actually lived: react to their karma, relations, memories, flags and player_profile.history (past events, how they ended and what the player chose). A recurring NPC keeps the same memory_key.
+- Rewards follow the ruleset caps when present: loot_caps and exp_caps are keyed by meta.tier_range.min, max_loot_per_outcome limits give_loot effects per outcome.{banned}
 - Keep it small: 1 to 3 stages, at most 12 dialogue nodes, at most 4 actors. Mark emotional lines of named NPCs with "live_rewrite": true.
 - Every outcome you use should change the world (flags, relations, karma, memories) and may queue a request_followup for what could happen next.
 - Pick a fresh id of the form pack.<short_snake_case_name>; it will be renamed.
@@ -47,19 +48,27 @@ def catalog_text(catalog):
     return "\n".join(lines)
 
 
+def banned_rule(words):
+    words = list(words)[:80]
+    return "\n- Never use these words anywhere in player-facing text: " + "、".join(words) if words else ""
+
+
 def director_messages(game, state, profile, request, example=None, taken_ids=()):
     system = DIRECTOR_RULES.format(
         language=game["language"],
         ruleset=json.dumps(game["ruleset"], ensure_ascii=False),
         catalog=catalog_text(game["catalog"]),
         style=game["style"] or "(none)",
+        banned=banned_rule(game.get("banned_words", ())),
         schema=json.dumps(validate.SCHEMA, ensure_ascii=False),
     )
     msgs = [{"role": "system", "content": system}]
     if example:
         msgs.append({"role": "user", "content": EXAMPLE_INTRO + "\n" + json.dumps(example, ensure_ascii=False)})
         msgs.append({"role": "assistant", "content": "Understood. Send the player's state and the request."})
-    req = {"player_profile": profile, "world_state": state, "request": request}
+    # history 已整理進 player_profile，不再重複帶完整紀錄
+    world = {k: v for k, v in state.items() if k != "history"}
+    req = {"player_profile": profile, "world_state": world, "request": request}
     if taken_ids:
         req["pack_ids_already_used"] = sorted(taken_ids)
     msgs.append({"role": "user", "content": json.dumps(req, ensure_ascii=False)})

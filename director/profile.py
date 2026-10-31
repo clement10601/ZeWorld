@@ -1,6 +1,7 @@
 """玩家側寫 v0：從世界狀態整理出導演與台詞模型看得懂的摘要。只用通用欄位，不含題材知識。"""
 
 LEAN = 10  # karma 絕對值達到這個數才算有傾向
+HISTORY = 8  # 側寫帶給導演的最近因果筆數
 
 
 def build_profile(state, ruleset):
@@ -31,6 +32,8 @@ def build_profile(state, ruleset):
         "total_kills": sum(int(v) for v in state.get("kills", {}).values()),
         "flags": state.get("flags", {}),
         "recent_events": [k for k, _ in seen[-5:]],
+        "history": [{k: h.get(k) for k in ("day", "title", "result", "choices")}
+                    for h in state.get("history", [])[-HISTORY:] if isinstance(h, dict)],
     }
 
 

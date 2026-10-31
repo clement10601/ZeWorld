@@ -34,6 +34,7 @@ var spawned: Dictionary = {}
 var defeated: Dictionary = {}
 var reached_nodes: Dictionary = {}
 var reached_points: Dictionary = {}
+var chosen: Array = []          # 這次玩家選過的選項文字，結束時寫進 state.history
 
 var _actors: Dictionary = {}
 var _visible_choices: Array = []
@@ -92,6 +93,7 @@ func choose(index: int) -> void:
 		if c["index"] == index:
 			var choice: Dictionary = _node(current_node)["choices"][index]
 			_visible_choices = []
+			chosen.append(choice["text"])
 			_apply_all(choice.get("effects", []))
 			if running:
 				_show_node(choice["next"])
@@ -192,6 +194,11 @@ func _finish(p_result: String) -> void:
 	result = p_result
 	_apply_all(pack["outcomes"].get("on_" + p_result, []), true)
 	state.seen_packs[pack["id"]] = state.day
+	var meta: Dictionary = pack.get("meta", {})
+	state.record_history({
+		"day": state.day, "pack": pack["id"], "title": meta.get("title", ""),
+		"result": p_result, "choices": chosen.duplicate(), "tags": meta.get("tags", []),
+	})
 	finished.emit(p_result)
 
 
