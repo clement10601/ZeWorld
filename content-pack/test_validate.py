@@ -56,3 +56,40 @@ def test_dangling_dialogue_rejected():
 def test_unknown_actor_rejected():
     errs = broken(lambda p: p["stages"][1]["complete_when"][0].update(actor="ghost"))
     assert any("ghost" in e for e in errs)
+
+
+GAME = validate.load_game(FIX / "zeworld.json")
+
+
+def test_game_manifest_loads():
+    assert GAME["ruleset"] == RULESET
+    assert "chunk.test_street" in GAME["catalog"]["chunks"]
+    assert GAME["style"].startswith("Low-fantasy")
+    for p in GAME["packs_dir"].glob("*.json"):
+        assert validate.validate(p, GAME["ruleset"], GAME["catalog"]) == [], p
+
+
+def catalog_errors(mutate):
+    pack = copy.deepcopy(RESCUE)
+    mutate(pack)
+    return validate.validate_pack(pack, GAME["ruleset"], GAME["catalog"])
+
+
+def test_unknown_chunk_rejected():
+    errs = catalog_errors(lambda p: p["map"]["chunks"][0].update(chunk="chunk.moon"))
+    assert any("chunk.moon" in e for e in errs)
+
+
+def test_point_outside_chosen_chunks_rejected():
+    def mutate(p):
+        p["map"]["points"].append("pt.arena")
+    assert any("pt.arena" in e for e in catalog_errors(mutate))
+
+
+def test_unknown_map_tag_template_and_loot_rejected():
+    def mutate(p):
+        p["trigger"]["all"][2]["map_tag"] = "volcano"
+        p["actors"][0]["template"] = "npc.dragon"
+        p["outcomes"]["on_complete"][3]["loot_table"] = "loot.nope"
+    errs = catalog_errors(mutate)
+    assert len(errs) == 3, errs

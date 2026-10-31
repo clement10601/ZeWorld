@@ -1,8 +1,10 @@
 """內容包驗證器：Schema 檢查 + ruleset 名稱檢查 + 內部參照檢查。
 
-用法：python validate.py --ruleset path/to/ruleset.json pack1.json pack2.json ...
+用法：
+  python validate.py --game path/to/zeworld.json pack1.json ...   # ruleset + 素材目錄
+  python validate.py --ruleset path/to/ruleset.json pack1.json ...  # 只檢查 ruleset
 導演產出的內容包必須通過這裡才能進預生成池。
-數值平衡、世界觀一致性、素材是否存在等檢查之後再加。
+數值平衡、世界觀一致性等檢查之後再加。
 """
 import argparse
 import json
@@ -111,25 +113,95 @@ def check_refs(pack):
     return errors
 
 
-def validate(path, ruleset):
-    pack = json.loads(Path(path).read_text(encoding="utf-8"))
+def load_game(manifest_path):
+    """讀遊戲清單 zeworld.json，回傳 ruleset、素材目錄、風格說明與內容包資料夾。"""
+    manifest_path = Path(manifest_path)
+    root = manifest_path.parent
+    m = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    def read(key, default):
+        if key not in m:
+            return default
+        f = root / m[key]
+        return json.loads(f.read_text(encoding="utf-8")) if f.suffix == ".json" else f.read_text(encoding="utf-8")
+
+    def entries(d):
+        return {k: v for k, v in d.items() if not k.startswith("_")}
+
+    return {
+        "name": m.get("game", root.name),
+        "language": m.get("language", "en"),
+        "ruleset": read("ruleset", {}),
+        "catalog": {
+            "chunks": entries(read("chunks", {})),
+            "loot": entries(read("loot", {})),
+            "actor_templates": entries(read("actor_templates", {})),
+        },
+        "style": read("style", "").strip(),
+        "packs_dir": root / m.get("packs", "packs"),
+    }
+
+
+def check_catalog(pack, catalog):
+    """內容包只能用遊戲素材目錄裡有的地圖區塊、地點、地圖標籤、角色模板與掉落表。"""
+    errors = []
+    chunks, loot, templates = catalog["chunks"], catalog["loot"], catalog["actor_templates"]
+    map_ = pack.get("map")
+    if map_:
+        pts = set()
+        for entry in map_["chunks"]:
+            if entry["chunk"] not in chunks:
+                errors.append(f"map.chunks: 區塊 {entry['chunk']} 不在遊戲素材目錄")
+            else:
+                pts.update(chunks[entry["chunk"]].get("points", {}))
+        for p in map_.get("points", []) + [map_["spawn"]]:
+            if p not in pts:
+                errors.append(f"map: 地點 {p} 不在所選區塊裡")
+    tags = {t for c in chunks.values() for t in c.get("tags", [])}
+    for where, c in walk_conditions(pack):
+        if c["type"] == "enter_map" and c["map_tag"] not in tags:
+            errors.append(f"{where}: 地圖標籤 {c['map_tag']} 沒有任何區塊使用")
+    for a in pack.get("actors", []):
+        if a["template"] not in templates:
+            errors.append(f"actor {a['id']}: 模板 {a['template']} 不在遊戲素材目錄")
+    for where, e in walk_effects(pack):
+        if e["type"] == "give_loot" and e["loot_table"] not in loot:
+            errors.append(f"{where}: 掉落表 {e['loot_table']} 不在遊戲素材目錄")
+    return errors
+
+
+def validate_pack(pack, ruleset, catalog=None):
     validator = Draft202012Validator(SCHEMA)
     errors = [f"{'/'.join(map(str, e.absolute_path)) or '(root)'}: {e.message}"
               for e in validator.iter_errors(pack)]
     if not errors:
         errors = check_ruleset(pack, ruleset) + check_refs(pack)
+        if catalog is not None:
+            errors += check_catalog(pack, catalog)
     return errors
+
+
+def validate(path, ruleset, catalog=None):
+    return validate_pack(json.loads(Path(path).read_text(encoding="utf-8")), ruleset, catalog)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--ruleset", required=True)
-    ap.add_argument("packs", nargs="+")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--game", help="遊戲清單 zeworld.json")
+    src.add_argument("--ruleset")
+    ap.add_argument("packs", nargs="*", help="省略時檢查遊戲清單裡的 packs 資料夾")
     args = ap.parse_args()
-    ruleset = json.loads(Path(args.ruleset).read_text(encoding="utf-8"))
+    if args.game:
+        game = load_game(args.game)
+        ruleset, catalog = game["ruleset"], game["catalog"]
+        packs = args.packs or sorted(map(str, game["packs_dir"].glob("*.json")))
+    else:
+        ruleset, catalog = json.loads(Path(args.ruleset).read_text(encoding="utf-8")), None
+        packs = args.packs
     failed = 0
-    for p in args.packs:
-        errs = validate(p, ruleset)
+    for p in packs:
+        errs = validate(p, ruleset, catalog)
         print(("OK   " if not errs else "FAIL ") + p)
         for e in errs:
             print("     - " + e)

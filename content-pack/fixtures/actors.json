@@ -1,0 +1,5 @@
+{
+  "npc.test": { "name": "Townsfolk", "description": "Any friendly or neutral human NPC." },
+  "mob.test": { "name": "Bandit", "description": "Hostile human fighter." },
+  "boss.test": { "name": "Mirror self", "description": "Boss that copies the player." }
+}

@@ -1,0 +1,6 @@
+{
+  "chunk.test_street": { "name": "Street", "width": 960, "tags": ["town"], "points": { "pt.left": 100, "pt.center": 480, "pt.right": 860 } },
+  "chunk.test_entry": { "name": "Mirror gate", "width": 600, "tags": ["trial"], "points": { "pt.start": 80, "pt.square": 400 } },
+  "chunk.test_arena": { "name": "Mirror arena", "width": 900, "tags": ["trial"], "points": { "pt.arena": 450, "pt.exit": 820 } },
+  "chunk.test_woods": { "name": "Woods", "width": 960, "tags": ["forest"], "points": { "pt.woods_edge": 120, "pt.woods_deep": 700 } }
+}
