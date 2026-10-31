@@ -373,3 +373,6 @@ func test_fits_reorder_candidates() -> void:
 	var fits := {"pack.test.rescue": 3.5, "pack.test.rescue_b": 1.0}
 	expect(TriggerJudge.pick([a, b], s, {}, fits)["id"] == "pack.test.rescue", "a much better fit beats a small priority edge")
 	expect(TriggerJudge.pick([a, b], s, {}, {"pack.test.rescue": 2.3})["id"] == "pack.test.rescue_b", "a slight fit edge does not")
+	expect(TriggerJudge.pick([a, b], s, {}, {"pack.test.rescue_b": 0.0})["id"] == "pack.test.rescue_b", "a low fit never subtracts")
+	b["trigger"]["priority"] = a["trigger"].get("priority", 50) + 15
+	expect(TriggerJudge.pick([a, b], s, {}, {"pack.test.rescue": 4.0})["id"] == "pack.test.rescue_b", "fit bonus is capped below a large priority gap")

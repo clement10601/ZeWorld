@@ -1,12 +1,13 @@
 ## 判斷器。第一層是規則篩選：從內容包池挑出「現在可以上場」的內容包。
-## 第二層是決策模型給的貼合度 fits（DirectorClient.request_ranking 事先算好）：{內容包 id: 0–4}，
-## 和 priority 合併排序。沒有分數的內容包當作中間值 2，所以沒接決策模型時就是純 priority 排序。
+## 第二層是決策模型給的貼合度 fits（DirectorClient.request_ranking 事先算好）：{內容包 id: 0–4}。
+## 貼合度只當加分：高於中間值 2 才加，低於不扣，所以排序主體仍是 priority，模型只在接近的候選間分高下。
+## 實測 Jev 會偏好「具體、有戲」的候選，即使前提沒發生（ZeWorld judge_bench），硬性前提交給第一層規則。
 extends RefCounted
 
 const Conditions = preload("res://addons/zeworld/conditions.gd")
 
-## 貼合度每差 1 級，等於 priority 差這麼多
-const FIT_WEIGHT := 10.0
+## 貼合度高於中間值每 1 級，加這麼多 priority；最多加 2 級（+10）
+const FIT_WEIGHT := 5.0
 const NEUTRAL_FIT := 2.0
 
 
@@ -28,7 +29,7 @@ static func pick(pool: Array, state, event: Dictionary = {}, fits: Dictionary = 
 
 static func rank_of(pack: Dictionary, fits: Dictionary) -> float:
 	var fit := float(fits.get(pack["id"], NEUTRAL_FIT))
-	return float(pack["trigger"].get("priority", 50)) + FIT_WEIGHT * (fit - NEUTRAL_FIT)
+	return float(pack["trigger"].get("priority", 50)) + FIT_WEIGHT * clampf(fit - NEUTRAL_FIT, 0.0, 2.0)
 
 
 static func _eligible(pack: Dictionary, state, event: Dictionary) -> bool:
