@@ -32,6 +32,7 @@ func _initialize() -> void:
 		"test_history_records_choices",
 		"test_region_filter_and_stock",
 		"test_generated_pack_expires",
+		"test_abort_and_game_data",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -312,3 +313,18 @@ func test_generated_pack_expires() -> void:
 	expect(TriggerJudge.pick(p, s).is_empty(), "expired pack does not fire")
 	expect(PackPool.stock(p, s, "").is_empty() and PackPool.expired(p, s).size() == 1, "expired pack is not stock")
 	expect(s.to_dict()["pack_arrivals"].has(rescue["id"]), "arrivals are saved")
+
+
+func test_abort_and_game_data() -> void:
+	var s = rescue_ready_state()
+	var log := run(pack("pack.test.rescue"), s)
+	var r = log["runner"]
+	r.start()
+	r.abort("fail")
+	expect(log["result"] == "fail" and s.flags.get("stranger_captured") == true, "abort settles the fail outcome")
+	r.abort("complete")
+	expect(log["result"] == "fail", "abort after the end does nothing")
+	s.game_data["exp"] = 42
+	var t = WorldState.new(ruleset)
+	t.load_dict(s.to_dict())
+	expect(t.game_data.get("exp") == 42, "game data round-trips")
