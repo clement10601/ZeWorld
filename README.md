@@ -44,12 +44,23 @@
 ## 導演
 
 ```sh
-export ZEWORLD_LLM_BASE_URL=http://your-litellm:4000/v1   # 任何 OpenAI 相容端點
-export ZEWORLD_LLM_API_KEY=...                            # 本機模型可省略；金鑰只放環境變數
-export ZEWORLD_DIRECTOR_MODEL=your-director-model
-export ZEWORLD_DIALOGUE_MODEL=your-local-model                 # 省略時同導演模型
+pip install jsonschema anthropic
+
+# Claude API（建議）：金鑰只放環境變數，不要寫進檔案
+export ZEWORLD_ANTHROPIC_API_KEY=...
+# 選用：預設導演 claude-opus-5-5、即時台詞 claude-haiku-5-5
+# export ZEWORLD_DIRECTOR_MODEL=claude-opus-5-5
+# export ZEWORLD_DIALOGUE_MODEL=claude-haiku-5-5
+
+# 或任何 OpenAI 相容端點（LiteLLM、vLLM、Ollama），沒設 Claude 金鑰時才會用
+# export ZEWORLD_LLM_BASE_URL=http://your-litellm:4000/v1
+# export ZEWORLD_LLM_API_KEY=...
+# export ZEWORLD_DIRECTOR_MODEL=your-director-model
+
 python -m director serve --game ../Zetas/zeworld.json --out ../Zetas/.generated
 ```
+
+刻意不讀 `ANTHROPIC_API_KEY`／`ANTHROPIC_BASE_URL`，避免誤用同一台機器上其他工具的金鑰。導演用 Opus 時開了伺服器端拒答備援（`fallbacks: "default"`）。
 
 沒有模型時可用固定回覆離線跑：`python -m director serve --game ... --fake-pack some_pack.json --fake-line "..."`。
 
