@@ -2,6 +2,8 @@
 
 存取碼檔（JSON）只存雜湊，不存存取碼本身；存取碼在新增時印出一次，交給測試者。
 用量記在旁邊的 <檔名>.usage.json，以 UTC 日期分天，保留最近 14 天。
+存取碼檔可以是唯讀的（例如 Kubernetes Secret）：用 usage_path（導演的 --usage 或環境變數
+ZEWORLD_DIRECTOR_USAGE）把用量改寫到別的可寫位置。
 
 python -m director.access add  --file codes.json --name 阿明 [--daily-packs 40] [--daily-lines 800]
 python -m director.access list --file codes.json
@@ -13,6 +15,7 @@ import datetime
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import threading
 from pathlib import Path
@@ -42,9 +45,9 @@ class AccessDenied(Exception):
 
 
 class AccessCodes:
-    def __init__(self, path, clock=today):
+    def __init__(self, path, clock=today, usage_path=None):
         self.path = Path(path)
-        self.usage_path = self.path.with_name(self.path.name + ".usage.json")
+        self.usage_path = Path(usage_path) if usage_path else self.path.with_name(self.path.name + ".usage.json")
         self.clock = clock
         self.lock = threading.Lock()
         self.reload()
@@ -112,8 +115,10 @@ def main(argv=None):
     ap.add_argument("--name", help="測試者名稱")
     ap.add_argument("--daily-packs", type=int)
     ap.add_argument("--daily-lines", type=int)
+    ap.add_argument("--usage", default=os.environ.get("ZEWORLD_DIRECTOR_USAGE"),
+                    help="用量檔；沒給時用 <存取碼檔>.usage.json")
     args = ap.parse_args(argv)
-    access = AccessCodes(args.file)
+    access = AccessCodes(args.file, usage_path=args.usage)
     if args.command == "add":
         if not args.name:
             ap.error("add 需要 --name")

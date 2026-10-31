@@ -41,6 +41,8 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--access-codes", default=os.environ.get("ZEWORLD_DIRECTOR_ACCESS_CODES"),
                     help="serve：存取碼檔（python -m director.access 建立）。架在 localhost 以外時必填")
+    ap.add_argument("--usage", default=os.environ.get("ZEWORLD_DIRECTOR_USAGE"),
+                    help="serve：用量檔；沒給時寫在存取碼檔旁的 <檔名>.usage.json（存取碼檔唯讀時要給）")
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--fake-pack", help="假導演：每次都回這個檔案的內容")
     ap.add_argument("--fake-line", help="假台詞模型：每次都回這句")
@@ -57,7 +59,7 @@ def main(argv=None):
           file=sys.stderr, flush=True)
     director = Director(game, llm, args.retries, args.out)
     if args.command == "serve":
-        access = AccessCodes(args.access_codes) if args.access_codes else None
+        access = AccessCodes(args.access_codes, usage_path=args.usage) if args.access_codes else None
         if access is not None and not access.codes:
             sys.exit(f"存取碼檔 {args.access_codes} 沒有任何存取碼：先用 python -m director.access add 新增")
         try:
