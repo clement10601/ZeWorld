@@ -305,7 +305,8 @@
               "const": "killed"
             },
             "monster_tag": {
-              "type": "string"
+              "type": "string",
+              "description": "角色模板 id（例如 mob.wolf_demon）"
             },
             "count": {
               "type": "integer",
@@ -316,7 +317,8 @@
             "monster_tag",
             "count"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "打倒這種怪的數量。觸發條件算累計；內容包進行中（階段條件、選項 show_if）只算這個內容包開始之後打倒的，可以寫「去打倒 N 隻某怪」的目標"
         },
         {
           "properties": {

@@ -45,7 +45,12 @@ def catalog_text(catalog):
     if catalog.get("regions"):
         lines.append("Regions (meta.region; a pack set in a region uses only that region's chunks):")
         for rid, r in catalog["regions"].items():
-            lines.append(f"- {rid}: {r.get('name', '')} — {r.get('description', '')}; chunks={r.get('chunks', [])}")
+            line = f"- {rid}: {r.get('name', '')} — {r.get('description', '')}; chunks={r.get('chunks', [])}"
+            if r.get("wild"):
+                # 遊戲地圖上的野怪：內容包可以用 killed 條件出「打倒 N 隻」的目標或觸發
+                mobs = sorted({f"{w['template']}（{w.get('name', '')}，{w.get('chunk', '')}，{'/'.join(w.get('times', [])) or 'any time'}）" for w in r["wild"]})
+                line += f"; wild monsters (usable in killed conditions)={mobs}"
+            lines.append(line)
     lines.append("Loot tables (give_loot.tier picks common/rare/epic):")
     for lid in catalog["loot"]:
         lines.append(f"- {lid}")

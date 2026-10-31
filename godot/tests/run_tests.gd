@@ -7,6 +7,7 @@ const PackRunner = preload("res://addons/zeworld/pack_runner.gd")
 const TriggerJudge = preload("res://addons/zeworld/trigger_judge.gd")
 const PackPool = preload("res://addons/zeworld/pack_pool.gd")
 const AssetLibrary = preload("res://addons/zeworld/asset_library.gd")
+const Conditions = preload("res://addons/zeworld/conditions.gd")
 
 var fixtures := ProjectSettings.globalize_path("res://").path_join("../content-pack/fixtures")
 var ruleset: Dictionary
@@ -36,6 +37,7 @@ func _initialize() -> void:
 		"test_abort_and_game_data",
 		"test_asset_library",
 		"test_fits_reorder_candidates",
+		"test_killed_counts_from_pack_start",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -376,3 +378,23 @@ func test_fits_reorder_candidates() -> void:
 	expect(TriggerJudge.pick([a, b], s, {}, {"pack.test.rescue_b": 0.0})["id"] == "pack.test.rescue_b", "a low fit never subtracts")
 	b["trigger"]["priority"] = a["trigger"].get("priority", 50) + 15
 	expect(TriggerJudge.pick([a, b], s, {}, {"pack.test.rescue": 4.0})["id"] == "pack.test.rescue_b", "fit bonus is capped below a large priority gap")
+
+
+## killed：觸發條件算累計；內容包進行中只算開始之後打倒的，包含遊戲回報的內容包以外的怪。
+func test_killed_counts_from_pack_start() -> void:
+	var s = WorldState.new(ruleset)
+	s.record_kill("mob.wolf")
+	s.record_kill("mob.wolf")
+	var cond := [{"type": "killed", "monster_tag": "mob.wolf", "count": 2}]
+	expect(Conditions.all_true(cond, s), "outside a pack, killed counts every kill so far")
+	var p := {"id": "pack.test.hunt", "meta": {"title": "hunt"}, "stages": [
+		{"id": "s1", "objective": "hunt", "complete_when": cond}],
+		"outcomes": {"on_complete": [], "on_fail": []}}
+	var log := run(p, s)
+	var r = log["runner"]
+	r.start()
+	expect(r.running and log["result"] == "", "earlier kills do not finish a kill objective")
+	r.notify({"type": "monster_killed", "monster_tag": "mob.wolf"})
+	expect(r.running and s.kills["mob.wolf"] == 3, "a reported outside kill is recorded")
+	r.notify({"type": "monster_killed", "monster_tag": "mob.wolf"})
+	expect(log["result"] == "complete", "two kills after the start finish the objective")

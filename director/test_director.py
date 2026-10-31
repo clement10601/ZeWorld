@@ -420,3 +420,12 @@ def test_cors_preflight_and_headers():
             assert r.headers.get("Access-Control-Allow-Origin") is None
     finally:
         quiet.shutdown()
+
+
+def test_catalog_lists_wild_monsters():
+    catalog = json.loads(json.dumps(GAME["catalog"]))
+    catalog["regions"]["region.test_town"]["wild"] = [
+        {"template": "mob.test", "name": "野狗", "chunk": "chunk.street", "times": ["night"]}]
+    text = prompts.catalog_text(catalog)
+    assert "wild monsters" in text and "mob.test（野狗，chunk.street，night）" in text
+    assert "wild monsters" not in prompts.catalog_text(GAME["catalog"])

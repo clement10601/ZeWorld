@@ -41,6 +41,7 @@ var _visible_choices: Array = []
 var _line: Dictionary = {}
 var _checking := false
 var _dirty := false
+var kills_at_start: Dictionary = {}  # 內容包開始時的擊殺數：階段裡的 killed 只算開始之後打倒的
 
 
 func _init(p_pack: Dictionary, p_state) -> void:
@@ -52,6 +53,7 @@ func _init(p_pack: Dictionary, p_state) -> void:
 
 func start() -> void:
 	running = true
+	kills_at_start = state.kills.duplicate()
 	for a in pack.get("actors", []):
 		if a.get("spawn", "on_start") == "on_start":
 			_spawn(a["id"])
@@ -59,7 +61,8 @@ func start() -> void:
 	_check_progress()
 
 
-## 遊戲回報發生的事：{"type": "actor_defeated", "actor": id} 或 {"type": "reach_point", "point": id}
+## 遊戲回報發生的事：{"type": "actor_defeated", "actor": id}、{"type": "reach_point", "point": id}，
+## 或 {"type": "monster_killed", "monster_tag": tag}（內容包以外的怪，例如地圖上的野怪，給 killed 條件算數）
 func notify(event: Dictionary) -> void:
 	if not running:
 		return
@@ -71,6 +74,8 @@ func notify(event: Dictionary) -> void:
 				state.record_kill(_actors[id]["template"])
 		"reach_point":
 			reached_points[event["point"]] = true
+		"monster_killed":
+			state.record_kill(event["monster_tag"])
 	_check_progress()
 
 
@@ -121,7 +126,8 @@ func objective() -> String:
 
 
 func _ctx() -> Dictionary:
-	return {"defeated": defeated, "reached_nodes": reached_nodes, "reached_points": reached_points}
+	return {"defeated": defeated, "reached_nodes": reached_nodes, "reached_points": reached_points,
+		"kills_at_start": kills_at_start}
 
 
 func _node(id: String) -> Dictionary:
