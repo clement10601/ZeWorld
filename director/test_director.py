@@ -353,3 +353,24 @@ def test_judge_bench_runs_with_fake_judge(tmp_path):
     report = judge_bench.run(GAME, loaded, FakeJudge({trial_title: 3.5}), runs=2)
     assert report[0]["passed"] == 2 and report[0]["runs"][0]["top"] == "pack.test.trial"
     assert "2/2" in judge_bench.summary(report, "fake")
+
+
+def test_bench_check_expect():
+    from director.bench import check_expect
+    pack = json.loads(REPLY)
+    pack["meta"]["region"] = "region.test_town"
+    gate = [{"type": "tier_up", "to": "adept"}]
+    pack["trigger"]["all"][:0] = gate
+    ok = {"chunk_tag": "forest", "templates": ["mob.test"], "sets_flag": "gang_broken",
+          "forbid_conditions": ["tier_up", "flag"], "region_map_tags": True,
+          "mentions_any": ["Scar", "nobody"], "mentions_none": ["dragon"], "max_loot": 1}
+    # gate 是引擎加的，不算進 forbid_conditions
+    assert check_expect(pack, ok, GAME, {"region": "region.test_town", "gate": gate}) == []
+    bad = {"chunk_tag": "trial", "templates": ["boss.test"], "sets_flag": "other", "no_meta_region": True,
+           "no_extra_conditions": True,
+           "forbid_conditions": ["time_of_day"], "region_map_tags": True,
+           "mentions_any": ["dragon"], "mentions_none": ["Scar"], "max_loot": 0}
+    unmet = check_expect(pack, bad, GAME, {"region": "region.test_trial", "gate": gate})
+    assert [u.split(":")[0] for u in unmet] == [
+        "chunk_tag", "templates", "sets_flag", "forbid_conditions", "no_extra_conditions", "region_map_tags",
+        "no_meta_region", "mentions_any", "mentions_none", "max_loot"]
