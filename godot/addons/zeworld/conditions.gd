@@ -4,6 +4,7 @@
 ##   defeated       已擊敗的 actor id
 ##   reached_nodes  已出現過的對話節點
 ##   reached_points 已抵達的地點
+##   kills_at_start 內容包開始時的擊殺數（有它時 killed 只算之後打倒的）
 extends RefCounted
 
 
@@ -44,7 +45,9 @@ static func check(c: Dictionary, state, ctx: Dictionary = {}) -> bool:
 		"time_of_day":
 			return state.time_of_day in c["in"]
 		"killed":
-			return int(state.kills.get(c["monster_tag"], 0)) >= int(c["count"])
+			# 內容包進行中只算開始之後打倒的；觸發條件（沒有 kills_at_start）算累計
+			var base := int(ctx.get("kills_at_start", {}).get(c["monster_tag"], 0))
+			return int(state.kills.get(c["monster_tag"], 0)) - base >= int(c["count"])
 		"has_item":
 			return int(state.items.get(c["item"], 0)) >= int(c.get("count", 1))
 		"reach_point":
