@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ._validate import validate
 from .core import Director, DirectorError
-from .llm import FakeLLM, OpenAICompatLLM
+from .llm import FakeLLM, llm_from_env
 from .profile import build_profile
 from .server import make_server
 
@@ -18,9 +18,10 @@ def make_llm(args):
     if args.fake_pack or args.fake_line:
         pack = Path(args.fake_pack).read_text(encoding="utf-8") if args.fake_pack else ""
         return FakeLLM(director=lambda _m: pack, dialogue=lambda _m: args.fake_line or "")
-    llm = OpenAICompatLLM.from_env()
+    llm = llm_from_env()
     if llm is None:
-        sys.exit("沒有 LLM 設定：請設 ZEWORLD_LLM_BASE_URL 與 ZEWORLD_DIRECTOR_MODEL，或用 --fake-pack 離線跑。")
+        sys.exit("沒有 LLM 設定：請設 ZEWORLD_ANTHROPIC_API_KEY（Claude API），"
+                 "或 ZEWORLD_LLM_BASE_URL 與 ZEWORLD_DIRECTOR_MODEL（OpenAI 相容端點），或用 --fake-pack 離線跑。")
     return llm
 
 
@@ -46,7 +47,10 @@ def main(argv=None):
     if args.command == "profile":
         print(json.dumps(build_profile(state, game["ruleset"]), ensure_ascii=False, indent=2))
         return
-    director = Director(game, make_llm(args), args.retries, args.out)
+    llm = make_llm(args)
+    print(f"director: {type(llm).__name__} director={llm.model_for('director')} dialogue={llm.model_for('dialogue')}",
+          file=sys.stderr, flush=True)
+    director = Director(game, llm, args.retries, args.out)
     if args.command == "serve":
         server = make_server(director, args.host, args.port)
         print(f"director: serving {game['name']} on http://{args.host}:{server.server_port}", flush=True)

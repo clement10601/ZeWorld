@@ -1,6 +1,11 @@
-"""LLM 用戶端。走 OpenAI 相容的 /chat/completions，LiteLLM、vLLM、Ollama 都能接。
+"""LLM 用戶端。兩種後端，設定只從環境變數讀，金鑰不寫進任何檔案。
 
-設定只從環境變數讀，金鑰不寫進任何檔案：
+Claude API（官方 anthropic SDK，pip install anthropic）：
+  ZEWORLD_ANTHROPIC_API_KEY  Claude API 金鑰。刻意不讀 ANTHROPIC_API_KEY，免得誤用其他工具的金鑰
+  ZEWORLD_DIRECTOR_MODEL     省略時 claude-opus-5-5
+  ZEWORLD_DIALOGUE_MODEL     省略時 claude-haiku-5-5（即時台詞要快）
+
+OpenAI 相容端點（LiteLLM、vLLM、Ollama），沒設 Claude 金鑰時使用：
   ZEWORLD_LLM_BASE_URL   例如 http://ubt015:4000/v1
   ZEWORLD_LLM_API_KEY    可省略（本機模型通常不需要）
   ZEWORLD_DIRECTOR_MODEL 產內容包用的模型
@@ -13,6 +18,62 @@ import urllib.request
 
 class LLMError(RuntimeError):
     pass
+
+
+def llm_from_env():
+    """有 Claude 金鑰就用 Claude API，否則用 OpenAI 相容端點；都沒設定回傳 None。"""
+    return AnthropicLLM.from_env() or OpenAICompatLLM.from_env()
+
+
+class AnthropicLLM:
+    DEFAULT_MODELS = {"director": "claude-opus-5-5", "dialogue": "claude-haiku-5-5"}
+    # 導演要想清楚，台詞要快
+    EFFORT = {"director": "medium", "dialogue": "low"}
+    # 安全分類器拒答時由伺服器改用其他模型重跑；Haiku 沒有伺服器端備援
+    FALLBACK_MODELS = ("claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5")
+
+    def __init__(self, api_key, models, timeout=180):
+        import anthropic
+        self._anthropic = anthropic
+        # base_url 寫死官方端點，不受 ANTHROPIC_BASE_URL 影響
+        self.client = anthropic.Anthropic(api_key=api_key, base_url="https://api.anthropic.com", timeout=timeout)
+        self.models = models
+
+    @classmethod
+    def from_env(cls):
+        key = os.environ.get("ZEWORLD_ANTHROPIC_API_KEY")
+        if not key:
+            return None
+        models = {"director": os.environ.get("ZEWORLD_DIRECTOR_MODEL", cls.DEFAULT_MODELS["director"]),
+                  "dialogue": os.environ.get("ZEWORLD_DIALOGUE_MODEL", cls.DEFAULT_MODELS["dialogue"])}
+        return cls(key, models)
+
+    def model_for(self, role):
+        return self.models[role]
+
+    def chat(self, messages, role="director", temperature=None, max_tokens=16000):
+        """messages 是 OpenAI 格式；開頭的 system 訊息轉成 system 參數。temperature 新模型不收，忽略。"""
+        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+        convo = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
+        model = self.models[role]
+        kwargs = dict(model=model, max_tokens=max(max_tokens, 2000), system=system, messages=convo,
+                      output_config={"effort": self.EFFORT[role]})
+        a = self._anthropic
+        try:
+            if model in self.FALLBACK_MODELS:
+                resp = self.client.beta.messages.create(betas=["server-side-fallback-2026-07-01"],
+                                                        fallbacks="default", **kwargs)
+            else:
+                resp = self.client.messages.create(**kwargs)
+        except a.APIStatusError as e:
+            raise LLMError(f"Claude API HTTP {e.status_code}: {e.message}") from e
+        except a.APIConnectionError as e:
+            raise LLMError(f"Claude API unreachable: {e}") from e
+        if resp.stop_reason == "refusal":
+            raise LLMError(f"Claude declined: {getattr(resp, 'stop_details', None)}")
+        if resp.stop_reason == "max_tokens":
+            raise LLMError("Claude reply hit max_tokens")
+        return "".join(b.text for b in resp.content if b.type == "text")
 
 
 class OpenAICompatLLM:
