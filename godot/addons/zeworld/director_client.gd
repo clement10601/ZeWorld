@@ -11,11 +11,14 @@ signal pack_generated(pack: Dictionary, followup: Dictionary)
 signal pack_failed(followup: Dictionary, reason: String)
 ## 即時改寫的台詞；交給 PackRunner.apply_rewrite。退回原句時不發。
 signal line_rewritten(node_id: String, text: String)
+## 決策模型給的貼合度 {內容包 id: 0–4}，交給 TriggerJudge.pick 的 fits。失敗時不發，遊戲照 priority 排序。
+signal ranking_ready(fits: Dictionary)
 
 var base_url := "http://127.0.0.1:8765"
 var access_code := ""
 var pack_timeout_sec := 90.0
 var rewrite_timeout_sec := 4.0
+var ranking_timeout_sec := 6.0
 ## 補貨失敗後，同一地區等這麼久才再請求
 var restock_cooldown_sec := 120.0
 
@@ -80,6 +83,25 @@ func _generate(state, followup: Dictionary, hint: String, region: String, done: 
 		else:
 			var reason: String = data.get("error", "") if data is Dictionary else ""
 			pack_failed.emit(followup, "HTTP %d %s" % [code, reason] if code else "director unreachable"))
+
+
+## 請導演的決策模型替候選內容包評分。在進地區、過一天這類不趕時間的時候先算好，
+## 觸發當下直接用快取的分數，不讓玩家等。moment 描述當下情境（地區、時辰等）。
+func request_ranking(state, packs: Array, moment: Dictionary = {}) -> void:
+	if packs.is_empty():
+		return
+	var brief := packs.map(func(p): return {
+		"id": p["id"], "kind": p.get("kind", ""),
+		"meta": {"title": p["meta"].get("title", ""), "summary": p["meta"].get("summary", ""), "tags": p["meta"].get("tags", [])},
+		"actors": p.get("actors", []).map(func(a): return {"name": a.get("name", a.get("id", ""))}),
+	})
+	var body := {"state": state.to_dict(), "packs": brief, "moment": moment}
+	_post("/v1/judge/rank", body, ranking_timeout_sec, func(code: int, data):
+		if code == 200 and data is Dictionary and data.get("scores") is Dictionary:
+			var fits := {}
+			for id in data["scores"]:
+				fits[id] = float(data["scores"][id].get("fit", 2.0))
+			ranking_ready.emit(fits))
 
 
 func request_rewrite(node_id: String, text: String, pack: Dictionary, state) -> void:

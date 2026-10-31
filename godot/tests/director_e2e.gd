@@ -44,6 +44,10 @@ func _run() -> void:
 	expect(tagged[0]["meta"]["request_tag"] == "encounter", "request tag comes back on the pack")
 	expect(tagged[0]["trigger"]["expires_after_days"] == 1 and tagged[0]["trigger"]["all"][0]["type"] == "tier_at_least", "gate and expiry written by the engine")
 
+	client.request_ranking(state, [pack, tagged[0]], {"region": "region.test_town"})
+	var fits: Dictionary = await client.ranking_ready  # 單一參數的訊號，await 直接回傳該參數
+	expect(fits.get(pack["id"]) == 2.0 and fits.has(tagged[0]["id"]), "ranking returns a fit per candidate")
+
 	state.region = "region.test_town"
 	expect(client.restock(state, [], 2) == 2, "restock asks for the shortfall")
 	expect(client.restock(state, [], 2) == 0, "in-flight requests count as stock")

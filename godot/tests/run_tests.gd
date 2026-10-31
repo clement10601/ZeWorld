@@ -35,6 +35,7 @@ func _initialize() -> void:
 		"test_generated_pack_expires",
 		"test_abort_and_game_data",
 		"test_asset_library",
+		"test_fits_reorder_candidates",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -360,3 +361,15 @@ func test_asset_library() -> void:
 	expect(AssetLibrary.from_file("user://nope.json").assets.is_empty(), "missing manifest gives an empty library")
 	for n in ["a.png", "b.png", "generic.png", "assets.json"]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(dir.path_join(n)))
+
+
+func test_fits_reorder_candidates() -> void:
+	var s = rescue_ready_state()
+	var a: Dictionary = pack("pack.test.rescue").duplicate(true)
+	var b: Dictionary = a.duplicate(true)
+	b["id"] = "pack.test.rescue_b"
+	b["trigger"]["priority"] = a["trigger"].get("priority", 50) + 5
+	expect(TriggerJudge.pick([a, b], s)["id"] == "pack.test.rescue_b", "without fits priority decides")
+	var fits := {"pack.test.rescue": 3.5, "pack.test.rescue_b": 1.0}
+	expect(TriggerJudge.pick([a, b], s, {}, fits)["id"] == "pack.test.rescue", "a much better fit beats a small priority edge")
+	expect(TriggerJudge.pick([a, b], s, {}, {"pack.test.rescue": 2.3})["id"] == "pack.test.rescue_b", "a slight fit edge does not")

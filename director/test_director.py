@@ -290,3 +290,53 @@ def test_check_lore_reports_bad_refs():
     errs = validate.check_lore(bad, GAME["ruleset"], GAME["catalog"])
     assert len(errs) == 4
     assert validate.check_lore(GAME["lore"], GAME["ruleset"], GAME["catalog"]) == []
+
+
+def test_judge_ranks_candidates_over_http(tmp_path):
+    from director.access import AccessCodes
+    from director.judge import FakeJudge, JudgeError, fit_request
+    rescue = copy.deepcopy(RESCUE)
+    other = copy.deepcopy(RESCUE)
+    other["id"], other["meta"]["title"] = "pack.test.other", "Other"
+    body, ids = fit_request(STATE, GAME["ruleset"], [rescue, other], {"region": "region.test_town"})
+    assert set(body["questions"]) == {"c0", "c1"} and ids["c1"] == "pack.test.other"
+    q = body["questions"]["c0"]
+    assert q["type"] == "score" and len(q["criteria"]) == 5 and "`candidates.c0`" in q["instructions"]
+    assert body["state"]["player"]["history"] == [] and body["state"]["candidates"]["c1"]["title"] == "Other"
+
+    judge = FakeJudge({"Other": 3.6})
+    access = AccessCodes(tmp_path / "codes.json")
+    code = access.add("t")
+    d = Director(GAME, FakeLLM())
+    server = make_server(d, port=0, access=access, judge=judge)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}/v1"
+    try:
+        req = urllib.request.Request(base + "/judge/rank", json.dumps({"state": STATE, "packs": [rescue, other]}).encode(),
+                                     {"Content-Type": "application/json", "Authorization": "Bearer " + code})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            scores = json.loads(r.read())["scores"]
+        assert scores["pack.test.other"]["fit"] == 3.6 and scores[rescue["id"]]["fit"] == 2.0
+        assert access.used("t", "judges") == 1
+
+        def boom(body):
+            raise JudgeError("down")
+        judge.ask = boom
+        try:
+            urllib.request.urlopen(req, timeout=5)
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 502
+    finally:
+        server.shutdown()
+    plain = make_server(d, port=0)
+    threading.Thread(target=plain.serve_forever, daemon=True).start()
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{plain.server_port}/v1/judge/rank", b"{}",
+                                     {"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+        assert False
+    except urllib.error.HTTPError as e:
+        assert e.code == 503
+    finally:
+        plain.shutdown()

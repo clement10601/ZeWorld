@@ -10,6 +10,7 @@ import pytest
 from director._validate import validate
 from director.access import AccessCodes
 from director.core import Director
+from director.judge import FakeJudge
 from director.llm import FakeLLM
 from director.server import make_server
 
@@ -24,7 +25,7 @@ def test_godot_client_talks_to_director(tmp_path):
     access = AccessCodes(tmp_path / "codes.json")
     code = access.add("e2e")
     server = make_server(Director(game, FakeLLM(director=lambda m: reply, dialogue=lambda m: "Well met again.")),
-                         port=0, access=access)
+                         port=0, access=access, judge=FakeJudge({}))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         env = dict(os.environ, ZEWORLD_DIRECTOR_URL=f"http://127.0.0.1:{server.server_port}",

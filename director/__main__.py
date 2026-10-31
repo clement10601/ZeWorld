@@ -11,6 +11,7 @@ from pathlib import Path
 from ._validate import validate
 from .access import AccessCodes
 from .core import Director, DirectorError
+from .judge import DecisionJudge
 from .llm import FakeLLM, llm_from_env
 from .profile import build_profile
 from .server import make_server
@@ -60,10 +61,11 @@ def main(argv=None):
         if access is not None and not access.codes:
             sys.exit(f"存取碼檔 {args.access_codes} 沒有任何存取碼：先用 python -m director.access add 新增")
         try:
-            server = make_server(director, args.host, args.port, access)
+            server = make_server(director, args.host, args.port, access, DecisionJudge.from_env())
         except ValueError:
             sys.exit("架在 localhost 以外需要存取碼：加上 --access-codes codes.json")
         auth = f"，{len(access.codes)} 組存取碼" if access else "，不驗存取碼"
+        auth += "，有決策模型" if os.environ.get("ZEWORLD_JUDGE_API_KEY") else "，沒有決策模型（排序用 priority）"
         print(f"director: serving {game['name']} on http://{args.host}:{server.server_port}{auth}", flush=True)
         server.serve_forever()
     else:

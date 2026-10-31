@@ -19,10 +19,12 @@ from pathlib import Path
 
 DEFAULT_DAILY_PACKS = 40
 DEFAULT_DAILY_LINES = 800
+DEFAULT_DAILY_JUDGES = 2000
 DEFAULT_TOTAL_DAILY_PACKS = 200
 KEEP_DAYS = 14
-# 用量種類 -> 個人上限欄位
-KINDS = {"packs": "daily_packs", "lines": "daily_lines"}
+# 用量種類 -> (個人上限欄位, 沒寫時的預設)
+KINDS = {"packs": ("daily_packs", DEFAULT_DAILY_PACKS), "lines": ("daily_lines", DEFAULT_DAILY_LINES),
+         "judges": ("daily_judges", DEFAULT_DAILY_JUDGES)}
 
 
 def digest(code):
@@ -81,7 +83,8 @@ class AccessCodes:
         name = entry["name"]
         with self.lock:
             day = self.clock()
-            if self.used(name, kind, day) >= int(entry.get(KINDS[kind], 0)):
+            field, default = KINDS[kind]
+            if self.used(name, kind, day) >= int(entry.get(field, default)):
                 raise AccessDenied(429, f"daily {kind} limit reached")
             if kind == "packs":
                 total = sum(int(u.get("packs", 0)) for u in self.usage.get(day, {}).values())
