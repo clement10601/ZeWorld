@@ -1,24 +1,34 @@
-## 判斷器第一層：規則篩選。從內容包池挑出「現在可以上場」的內容包，依 priority 排序。
-## 第二層（小模型或向量相似度排序）之後接在 candidates() 的結果上。
+## 判斷器。第一層是規則篩選：從內容包池挑出「現在可以上場」的內容包。
+## 第二層是決策模型給的貼合度 fits（DirectorClient.request_ranking 事先算好）：{內容包 id: 0–4}，
+## 和 priority 合併排序。沒有分數的內容包當作中間值 2，所以沒接決策模型時就是純 priority 排序。
 extends RefCounted
 
 const Conditions = preload("res://addons/zeworld/conditions.gd")
 
+## 貼合度每差 1 級，等於 priority 差這麼多
+const FIT_WEIGHT := 10.0
+const NEUTRAL_FIT := 2.0
+
 
 ## event 是觸發當下的事件，例如 {"type": "enter_map"} 或 {"type": "tier_up", "to": "adept"}。
-static func candidates(pool: Array, state, event: Dictionary = {}) -> Array:
+static func candidates(pool: Array, state, event: Dictionary = {}, fits: Dictionary = {}) -> Array:
 	var out: Array = []
 	for pack in pool:
 		if _eligible(pack, state, event):
 			out.append(pack)
-	out.sort_custom(func(a, b): return a["trigger"].get("priority", 50) > b["trigger"].get("priority", 50))
+	out.sort_custom(func(a, b): return rank_of(a, fits) > rank_of(b, fits))
 	return out
 
 
 ## 回傳最適合的內容包，沒有則回傳空 Dictionary。
-static func pick(pool: Array, state, event: Dictionary = {}) -> Dictionary:
-	var c := candidates(pool, state, event)
+static func pick(pool: Array, state, event: Dictionary = {}, fits: Dictionary = {}) -> Dictionary:
+	var c := candidates(pool, state, event, fits)
 	return c[0] if not c.is_empty() else {}
+
+
+static func rank_of(pack: Dictionary, fits: Dictionary) -> float:
+	var fit := float(fits.get(pack["id"], NEUTRAL_FIT))
+	return float(pack["trigger"].get("priority", 50)) + FIT_WEIGHT * (fit - NEUTRAL_FIT)
 
 
 static func _eligible(pack: Dictionary, state, event: Dictionary) -> bool:

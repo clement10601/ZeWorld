@@ -78,6 +78,21 @@ python -m director serve --game ../Zetas/zeworld.json --out ../Zetas/.generated
 - 遊戲語言是繁體中文時（`language` 以 `zh-Hant` 開頭或含「繁體」），內容包裡的簡體字會當成驗證錯誤丟回導演重寫。字表在 `director/data/zh_simplified_only.txt`（由 OpenCC 產生，排除「里、伙、群」這類繁中也用的字）。
 - Claude API 的系統提示與範例包有標提示快取，連續生成時大部分輸入 token 走快取價。
 
+### 判斷器第二層：決策模型評分
+
+規則篩選後還剩好幾個候選內容包時，導演可以請決策模型（System One API，預設是 OpenRouter 上的 TypeSafe Jev）依玩家經歷替每個候選包評分。分數範圍 0–4，代表這個事件此刻有多貼合這位玩家：是否接得上他的選擇、因果、關係和記憶。Jev 只回分數和機率，不生成文字，每次評分約 2k 輸入 token。
+
+```sh
+export ZEWORLD_JUDGE_API_KEY=...                       # OpenRouter 金鑰，只放環境變數
+# 選用：TypeSafe 直連
+# export ZEWORLD_JUDGE_BASE_URL=https://api.typesafe.ai/v1
+# export ZEWORLD_JUDGE_MODEL=jev-latest
+```
+
+- `POST /v1/judge/rank` 回傳 `{scores: {內容包 id: {fit, confidence}}}`。沒設金鑰時回 503，模型失敗時回 502。用存取碼時，評分次數另外計算（`daily_judges`，預設每人每天 2000 次）。
+- Godot 端：`DirectorClient.request_ranking(state, packs, moment)` 會發出 `ranking_ready(fits)`，把 `fits` 傳給 `TriggerJudge.pick(pool, state, event, fits)`。排序依據是 `priority + 10 × (fit − 2)`，沒有分數的內容包算 2，所以沒接決策模型時等同純 priority 排序。
+- 評分建議在進地區、過一天時先算好，觸發當下直接用快取，玩家不用等。
+
 ### 架在網路上給測試者用：存取碼與用量上限
 
 導演預設只聽 `127.0.0.1`。要給別台電腦連時，必須用存取碼，否則不肯啟動。存取碼檔只存雜湊，存取碼在新增時印一次：
