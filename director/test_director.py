@@ -208,3 +208,49 @@ def test_tag_gate_and_expiry_are_enforced(tmp_path):
     assert validate.validate_pack(pack, GAME["ruleset"], GAME["catalog"]) == []
     sent = json.loads(d.llm.calls[-1][1][-1]["content"])["request"]
     assert sent["required_trigger"] == gate and sent["expires_after_days"] == 1
+
+
+def test_access_codes_and_daily_limits(tmp_path):
+    from director.access import AccessCodes
+    day = ["2026-10-31"]
+    access = AccessCodes(tmp_path / "codes.json", clock=lambda: day[0])
+    code = access.add("amin", daily_packs=2, daily_lines=1)
+    other = access.add("bao", daily_packs=5, daily_lines=5)
+    access.total_daily_packs = 3
+    assert code not in (tmp_path / "codes.json").read_text(encoding="utf-8")  # 只存雜湊
+    d = Director(GAME, FakeLLM(director=lambda m: REPLY, dialogue=lambda m: "Well met."))
+    server = make_server(d, host="0.0.0.0", port=0, access=access)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}/v1"
+
+    def post(path, body, key=None):
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = "Bearer " + key
+        req = urllib.request.Request(base + path, json.dumps(body).encode(), headers)
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    gen = {"state": STATE, "followup": STATE["followups"][0]}
+    line = {"text": "Hello.", "node_id": "a1", "pack": RESCUE, "state": STATE}
+    try:
+        with urllib.request.urlopen(base + "/health", timeout=5) as r:
+            assert json.loads(r.read())["auth"] is True
+        assert post("/packs/generate", gen) == 401
+        assert post("/packs/generate", gen, "zw-wrong") == 401
+        assert [post("/packs/generate", gen, code) for _ in range(3)] == [200, 200, 429]
+        assert [post("/dialogue/rewrite", line, code) for _ in range(2)] == [200, 429]
+        assert post("/packs/generate", gen, other) == 200
+        assert post("/packs/generate", gen, other) == 429  # 合計上限 3
+        day[0] = "2026-11-01"
+        assert post("/packs/generate", gen, code) == 200
+        access.codes[0]["disabled"] = True
+        assert post("/packs/generate", gen, code) == 401
+        assert AccessCodes(tmp_path / "codes.json").used("amin", "packs", "2026-10-31") == 2
+    finally:
+        server.shutdown()
+    with pytest.raises(ValueError):
+        make_server(d, host="0.0.0.0", port=0)
