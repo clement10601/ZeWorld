@@ -19,6 +19,10 @@ var items: Dictionary = {}       # item id -> count
 var memories: Dictionary = {}    # npc memory_key -> Array[String]
 var followups: Array = []        # 交給導演的後續劇情請求；status: ""=待送、requested、ready、failed
 var seen_packs: Dictionary = {}  # pack id -> 結束時的 day
+## 因果紀錄：每個結束的內容包留一筆 {day, pack, title, result, choices, tags}，給導演回顧玩家做過的事
+var history: Array = []
+
+const HISTORY_LIMIT := 50
 
 
 func _init(p_ruleset: Dictionary = {}) -> void:
@@ -70,12 +74,18 @@ func take_item(item: String, count: int) -> void:
 	items[item] = max(0, int(items.get(item, 0)) - count)
 
 
+func record_history(entry: Dictionary) -> void:
+	history.append(entry)
+	if history.size() > HISTORY_LIMIT:
+		history = history.slice(history.size() - HISTORY_LIMIT)
+
+
 func to_dict() -> Dictionary:
 	return {
 		"day": day, "time_of_day": time_of_day, "tier_index": tier_index, "map_tags": map_tags,
 		"flags": flags, "flag_days": flag_days, "karma": karma, "relations": relations,
 		"kills": kills, "items": items, "memories": memories, "followups": followups,
-		"seen_packs": seen_packs, "save_id": save_id,
+		"seen_packs": seen_packs, "history": history, "save_id": save_id,
 	}
 
 

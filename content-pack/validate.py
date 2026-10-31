@@ -47,6 +47,72 @@ def walk_conditions(pack):
                 yield f"dialogue {nid} choice", c
 
 
+def walk_text(pack):
+    """內容包裡所有會給玩家或台詞模型看的文字。"""
+    meta = pack.get("meta", {})
+    yield "meta.title", meta.get("title", "")
+    yield "meta.summary", meta.get("summary", "")
+    for a in pack.get("actors", []):
+        for k in ("name", "title", "persona"):
+            if a.get(k):
+                yield f"actor {a['id']}.{k}", a[k]
+    for nid, node in pack.get("dialogue", {}).get("nodes", {}).items():
+        yield f"dialogue {nid}", node.get("text", "")
+        for c in node.get("choices", []):
+            yield f"dialogue {nid} choice", c.get("text", "")
+    for st in pack["stages"]:
+        yield f"stage {st['id']}.objective", st.get("objective", "")
+    for where, e in walk_effects(pack):
+        for k in ("text", "hint"):
+            if e.get(k):
+                yield f"{where} {e['type']}", e[k]
+
+
+LOOT_RANK = ["common", "rare", "epic"]
+EXP_RANK = ["small", "medium", "large"]
+
+
+def _cap_for(caps, tiers, tier):
+    """取該階級的上限；沒列到的階級沿用較低階級的設定。"""
+    for t in reversed(tiers[:tiers.index(tier) + 1]):
+        if t in caps:
+            return caps[t]
+    return None
+
+
+def check_balance(pack, ruleset):
+    """獎勵上限依內容包最低可觸發階級而定（ruleset 的 loot_caps、exp_caps、max_loot_per_outcome）。"""
+    errors = []
+    tiers = ruleset.get("tiers", [])
+    low = pack["meta"]["tier_range"]["min"]
+    if low not in tiers:
+        return errors
+    loot_cap = _cap_for(ruleset.get("loot_caps", {}), tiers, low)
+    exp_cap = _cap_for(ruleset.get("exp_caps", {}), tiers, low)
+    per_outcome = ruleset.get("max_loot_per_outcome")
+    for where, e in walk_effects(pack):
+        if e["type"] == "give_loot" and loot_cap and LOOT_RANK.index(e["tier"]) > LOOT_RANK.index(loot_cap):
+            errors.append(f"{where}: {low} 起的內容包掉落最高 {loot_cap}，不能給 {e['tier']}")
+        if e["type"] == "grant_exp" and exp_cap and EXP_RANK.index(e["amount"]) > EXP_RANK.index(exp_cap):
+            errors.append(f"{where}: {low} 起的內容包經驗最高 {exp_cap}，不能給 {e['amount']}")
+    if per_outcome is not None:
+        for key, effects in pack["outcomes"].items():
+            n = sum(1 for e in effects if e["type"] == "give_loot")
+            if n > per_outcome:
+                errors.append(f"outcomes.{key}: give_loot 有 {n} 個，上限 {per_outcome}")
+    return errors
+
+
+def check_words(pack, banned):
+    """遊戲禁用詞（例如仙俠題材不該出現的現代詞）。"""
+    errors = []
+    for where, text in walk_text(pack):
+        hits = [w for w in banned if w in text]
+        if hits:
+            errors.append(f"{where}: 出現禁用詞 {'、'.join(hits)}")
+    return errors
+
+
 def check_ruleset(pack, ruleset):
     """題材名稱（階級、karma 軸、時段）必須是遊戲 ruleset 裡定義的。"""
     errors = []
@@ -138,6 +204,8 @@ def load_game(manifest_path):
             "actor_templates": entries(read("actor_templates", {})),
         },
         "style": read("style", "").strip(),
+        "banned_words": [w.strip() for w in read("banned_words", "").splitlines()
+                         if w.strip() and not w.startswith("#")],
         "packs_dir": root / m.get("packs", "packs"),
     }
 
@@ -170,19 +238,20 @@ def check_catalog(pack, catalog):
     return errors
 
 
-def validate_pack(pack, ruleset, catalog=None):
+def validate_pack(pack, ruleset, catalog=None, banned_words=()):
     validator = Draft202012Validator(SCHEMA)
     errors = [f"{'/'.join(map(str, e.absolute_path)) or '(root)'}: {e.message}"
               for e in validator.iter_errors(pack)]
     if not errors:
-        errors = check_ruleset(pack, ruleset) + check_refs(pack)
+        errors = check_ruleset(pack, ruleset) + check_refs(pack) + check_balance(pack, ruleset)
         if catalog is not None:
             errors += check_catalog(pack, catalog)
+        errors += check_words(pack, banned_words)
     return errors
 
 
-def validate(path, ruleset, catalog=None):
-    return validate_pack(json.loads(Path(path).read_text(encoding="utf-8")), ruleset, catalog)
+def validate(path, ruleset, catalog=None, banned_words=()):
+    return validate_pack(json.loads(Path(path).read_text(encoding="utf-8")), ruleset, catalog, banned_words)
 
 
 if __name__ == "__main__":
@@ -194,14 +263,14 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.game:
         game = load_game(args.game)
-        ruleset, catalog = game["ruleset"], game["catalog"]
+        ruleset, catalog, banned = game["ruleset"], game["catalog"], game["banned_words"]
         packs = args.packs or sorted(map(str, game["packs_dir"].glob("*.json")))
     else:
-        ruleset, catalog = json.loads(Path(args.ruleset).read_text(encoding="utf-8")), None
+        ruleset, catalog, banned = json.loads(Path(args.ruleset).read_text(encoding="utf-8")), None, ()
         packs = args.packs
     failed = 0
     for p in packs:
-        errs = validate(p, ruleset, catalog)
+        errs = validate(p, ruleset, catalog, banned)
         print(("OK   " if not errs else "FAIL ") + p)
         for e in errs:
             print("     - " + e)

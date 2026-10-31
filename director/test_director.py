@@ -10,6 +10,7 @@ import pytest
 from director._validate import validate
 from director.core import Director, DirectorError, clean_line, extract_json, previous_line
 from director.llm import FakeLLM
+from director import prompts
 from director.profile import build_profile
 from director.server import make_server
 
@@ -172,3 +173,17 @@ def test_http_server_round_trip():
         assert code == 200 and body["text"] == "Well met."
     finally:
         server.shutdown()
+
+
+def test_profile_carries_recent_history_and_prompt_drops_raw_copy():
+    state = {"history": [{"day": d, "pack": f"p{d}", "title": f"t{d}", "result": "complete",
+                          "choices": ["c"], "tags": []} for d in range(12)]}
+    prof = build_profile(state, {"tiers": ["novice"]})
+    assert [h["day"] for h in prof["history"]] == list(range(4, 12))
+    assert "pack" not in prof["history"][0]
+    game = dict(GAME)
+    game["banned_words"] = ["phone"]
+    msgs = prompts.director_messages(game, state, prof, {"kind": "fresh"})
+    req = json.loads(msgs[-1]["content"])
+    assert "history" not in req["world_state"] and len(req["player_profile"]["history"]) == 8
+    assert "phone" in msgs[0]["content"]

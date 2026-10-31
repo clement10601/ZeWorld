@@ -29,6 +29,7 @@ func _initialize() -> void:
 		"test_async_rewrite",
 		"test_followup_flag_and_generated_pack",
 		"test_save_and_load",
+		"test_history_records_choices",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -247,4 +248,29 @@ func test_save_and_load() -> void:
 	expect(t.save_id == "save.test" and t.day == 2 and t.karma["order"] == 7 and t.flags["helped_stranger"] == true, "state round-trips")
 	expect(t.followups[0]["status"] == "", "unanswered request goes back to pending")
 	expect(not WorldState.new(ruleset).load_file("user://missing.json"), "missing save returns false")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_history_records_choices() -> void:
+	var s = rescue_ready_state()
+	var log := run(pack("pack.test.rescue"), s)
+	var r = log["runner"]
+	r.start()
+	r.advance()
+	r.advance()
+	var choice_text: String = log["lines"].back()[1]["choices"][1]["text"]
+	r.choose(1)
+	expect(s.history.size() == 1, "finished pack writes one history entry")
+	var h: Dictionary = s.history[0]
+	expect(h["pack"] == "pack.test.rescue" and h["result"] == "abandon" and h["day"] == 2, "history keeps pack, result, day")
+	expect(h["choices"] == [choice_text], "history keeps the chosen line")
+	expect(h["title"] == pack("pack.test.rescue")["meta"]["title"], "history keeps the title")
+	for i in WorldState.HISTORY_LIMIT + 5:
+		s.record_history({"day": i})
+	expect(s.history.size() == WorldState.HISTORY_LIMIT and s.history.back()["day"] == WorldState.HISTORY_LIMIT + 4, "history keeps only the latest entries")
+	var path := "user://zeworld_test_history.json"
+	s.save_file(path)
+	var t = WorldState.new(ruleset)
+	t.load_file(path)
+	expect(t.history.size() == WorldState.HISTORY_LIMIT, "history survives save and load")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
