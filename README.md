@@ -125,3 +125,11 @@ director.restock(state, PackPool.for_save(pool, state.save_id), 3)  # 不足 3 �
 ```
 
 送出中的請求會算進存貨，不會重複請求；失敗後該地區冷卻 `restock_cooldown_sec`（預設 120 秒）。補來的內容包走 `pack_generated`。
+
+### 素材庫
+
+`AssetLibrary.from_file("res://content/assets.json")` 讀遊戲的素材清單。`texture(id, key, fallback)` 依素材 id 找圖，找不到就改找 fallback（對應內容包 `requires_assets` 的 fallback），兩者都沒有時回傳 `null`，由遊戲畫替代圖形。`files` 有多張時是變體：同一個 key（例如 NPC 的 `memory_key`）永遠拿到同一張，所以共用模板的不同 NPC 也能長得不一樣。`missing()` 列出清單裡還沒有檔案的素材，可以當美術待辦。
+
+```json
+{"root": "res://art", "assets": {"npc.fox_girl": {"type": "sprite", "files": ["sprites/fox_girl_a.png", "sprites/fox_girl_b.png"], "height": 120}}}
+```
