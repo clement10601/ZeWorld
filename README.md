@@ -48,9 +48,9 @@ pip install jsonschema anthropic
 
 # Claude API（建議）：金鑰只放環境變數，不要寫進檔案
 export ZEWORLD_ANTHROPIC_API_KEY=...
-# 選用：預設導演 claude-opus-5-5、即時台詞 claude-haiku-5-5
+# 選用：預設導演 claude-opus-5-5、即時台詞 claude-sonnet-5-5
 # export ZEWORLD_DIRECTOR_MODEL=claude-opus-5-5
-# export ZEWORLD_DIALOGUE_MODEL=claude-haiku-5-5
+# export ZEWORLD_DIALOGUE_MODEL=claude-sonnet-5-5
 
 # 或任何 OpenAI 相容端點（LiteLLM、vLLM、Ollama），沒設 Claude 金鑰時才會用
 # export ZEWORLD_LLM_BASE_URL=http://your-litellm:4000/v1
@@ -65,7 +65,19 @@ python -m director serve --game ../Zetas/zeworld.json --out ../Zetas/.generated
 沒有模型時可用固定回覆離線跑：`python -m director serve --game ... --fake-pack some_pack.json --fake-line "..."`。
 
 - `POST /v1/packs/generate`：送世界狀態與後續劇情請求，回傳通過驗證的內容包。引擎會改寫 id、標記 `personalized_for`，並把「等 after_days 天」的條件加進觸發器（執行器在 `request_followup` 時會立 `followup:<內容包 id>` 旗標）。
-- `POST /v1/dialogue/rewrite`：依 NPC 設定、對玩家的記憶與關係改寫一句台詞；失敗、空白或過長都退回原句。
+- `POST /v1/dialogue/rewrite`：依 NPC 設定、對玩家的記憶與關係、上一句對白改寫一句台詞；失敗、空白、過長（超過原句 1.5 倍）或繁中遊戲混進簡體字都退回原句。模型多加的旁白（「某某冷笑道：」）與引號會先去掉。
+- 遊戲語言是繁體中文時（`language` 以 `zh-Hant` 開頭或含「繁體」），內容包裡的簡體字會當成驗證錯誤丟回導演重寫。字表在 `director/data/zh_simplified_only.txt`（由 OpenCC 產生，排除「里、伙、群」這類繁中也用的字）。
+- Claude API 的系統提示與範例包有標提示快取，連續生成時大部分輸入 token 走快取價。
+
+### 用真模型實測 `director.bench`
+
+會花 API 額度，不在 CI 跑。情境檔放在遊戲 repo（例如 Zetas 的 `tests/director/scenarios.json`），每個情境是一份世界狀態、要處理的後續劇情請求，以及要試改寫的台詞。
+
+```sh
+python -m director.bench --game ../Zetas/zeworld.json --scenarios ../Zetas/tests/director/scenarios.json --runs 2 --out /tmp/bench
+```
+
+輸出：內容包通過率、一次就過的比例、平均嘗試次數、每包秒數、token（含快取讀取）、台詞改寫的退回數與秒數、簡體字混入數；`--out` 會寫 `report.json` 和產出的內容包，方便人工讀文筆。
 - Godot 端用 `director_client.gd`：先顯示預寫台詞，改寫結果到了再交給 `PackRunner.apply_rewrite`（玩家已翻頁就丟掉）。
 
 ## 測試

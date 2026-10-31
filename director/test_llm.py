@@ -37,17 +37,30 @@ def test_director_uses_opus_with_server_fallback():
     kw = llm.client.beta.messages.calls[0]
     assert kw["model"] == "claude-opus-5-5" and kw["fallbacks"] == "default"
     assert kw["betas"] == ["server-side-fallback-2026-07-01"]
-    assert kw["system"] == "rules" and [m["role"] for m in kw["messages"]] == ["user", "assistant", "user"]
+    assert kw["system"] == [{"type": "text", "text": "rules", "cache_control": {"type": "ephemeral"}}]
+    assert [m["role"] for m in kw["messages"]] == ["user", "assistant", "user"]
+    # 範例包之後設快取點，最後一則（玩家狀態）每次不同不快取
+    assert kw["messages"][1]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert kw["messages"][2]["content"] == "go"
+    assert MSGS[2]["content"] == "ok"  # 不改呼叫端的訊息
     assert "temperature" not in kw and kw["output_config"] == {"effort": "medium"}
 
 
-def test_dialogue_uses_haiku_without_fallback():
+def test_dialogue_uses_sonnet_low_effort():
     llm = make()
     llm.chat(MSGS, role="dialogue", max_tokens=200)
-    kw = llm.client.messages.calls[0]
-    assert kw["model"] == "claude-haiku-5-5" and "fallbacks" not in kw
+    kw = llm.client.beta.messages.calls[0]
+    assert kw["model"] == "claude-sonnet-5-5"
+    assert kw["messages"][1]["content"] == "ok"  # 台詞不設快取點
     assert kw["max_tokens"] >= 2000  # 思考也算在 max_tokens 裡
     assert kw["output_config"] == {"effort": "low"}
+
+
+def test_model_without_server_fallback():
+    llm = AnthropicLLM("test-key", {"director": "claude-opus-5-5", "dialogue": "claude-haiku-5-5"})
+    llm.client = SimpleNamespace(messages=FakeMessages(), beta=SimpleNamespace(messages=FakeMessages()))
+    llm.chat(MSGS, role="dialogue")
+    assert "fallbacks" not in llm.client.messages.calls[0] and not llm.client.beta.messages.calls
 
 
 def test_refusal_and_truncation_raise():

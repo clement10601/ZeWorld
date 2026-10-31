@@ -3,7 +3,7 @@
 Claude API（官方 anthropic SDK，pip install anthropic）：
   ZEWORLD_ANTHROPIC_API_KEY  Claude API 金鑰。刻意不讀 ANTHROPIC_API_KEY，免得誤用其他工具的金鑰
   ZEWORLD_DIRECTOR_MODEL     省略時 claude-opus-5-5
-  ZEWORLD_DIALOGUE_MODEL     省略時 claude-haiku-5-5（即時台詞要快）
+  ZEWORLD_DIALOGUE_MODEL     省略時 claude-sonnet-5-5（實測 Haiku 常混簡體、把思考寫進台詞）
 
 OpenAI 相容端點（LiteLLM、vLLM、Ollama），沒設 Claude 金鑰時使用：
   ZEWORLD_LLM_BASE_URL   例如 http://ubt015:4000/v1
@@ -26,10 +26,10 @@ def llm_from_env():
 
 
 class AnthropicLLM:
-    DEFAULT_MODELS = {"director": "claude-opus-5-5", "dialogue": "claude-haiku-5-5"}
+    DEFAULT_MODELS = {"director": "claude-opus-5-5", "dialogue": "claude-sonnet-5-5"}
     # 導演要想清楚，台詞要快
     EFFORT = {"director": "medium", "dialogue": "low"}
-    # 安全分類器拒答時由伺服器改用其他模型重跑；Haiku 沒有伺服器端備援
+    # 安全分類器拒答時由伺服器改用其他模型重跑；不在清單裡的模型（如 Haiku）沒有伺服器端備援
     FALLBACK_MODELS = ("claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5")
 
     def __init__(self, api_key, models, timeout=180):
@@ -38,6 +38,7 @@ class AnthropicLLM:
         # base_url 寫死官方端點，不受 ANTHROPIC_BASE_URL 影響
         self.client = anthropic.Anthropic(api_key=api_key, base_url="https://api.anthropic.com", timeout=timeout)
         self.models = models
+        self.last_usage = None  # 最近一次呼叫的 token 用量，給 bench 算成本
 
     @classmethod
     def from_env(cls):
@@ -56,8 +57,13 @@ class AnthropicLLM:
         system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
         convo = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
         model = self.models[role]
-        kwargs = dict(model=model, max_tokens=max(max_tokens, 2000), system=system, messages=convo,
+        # 提示快取：系統提示（規則、素材目錄、schema）與範例包每次都一樣，標成快取點，重複呼叫只算快取讀取價
+        if role == "director" and len(convo) > 1:
+            convo[-2]["content"] = [{"type": "text", "text": convo[-2]["content"], "cache_control": {"type": "ephemeral"}}]
+        kwargs = dict(model=model, max_tokens=max(max_tokens, 2000), messages=convo,
                       output_config={"effort": self.EFFORT[role]})
+        if system:
+            kwargs["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         a = self._anthropic
         try:
             if model in self.FALLBACK_MODELS:
@@ -69,6 +75,11 @@ class AnthropicLLM:
             raise LLMError(f"Claude API HTTP {e.status_code}: {e.message}") from e
         except a.APIConnectionError as e:
             raise LLMError(f"Claude API unreachable: {e}") from e
+        u = getattr(resp, "usage", None)
+        self.last_usage = u and {"input": u.input_tokens, "output": u.output_tokens,
+                           "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
+                           "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0,
+                           "model": getattr(resp, "model", model)}
         if resp.stop_reason == "refusal":
             raise LLMError(f"Claude declined: {getattr(resp, 'stop_details', None)}")
         if resp.stop_reason == "max_tokens":
