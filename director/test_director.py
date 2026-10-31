@@ -254,3 +254,39 @@ def test_access_codes_and_daily_limits(tmp_path):
         server.shutdown()
     with pytest.raises(ValueError):
         make_server(d, host="0.0.0.0", port=0)
+
+
+def test_lore_reference_follows_region_tier_and_tag():
+    from director import lore
+    town = lore.select(GAME["lore"], dict(STATE, region="region.test_town"), GAME["ruleset"], k=8)
+    assert [k for k, _ in town][0] == "lore.grey_wolf"
+    assert "lore.mirror_spirit" not in dict(town)  # 別的地區
+    trial = dict(STATE, region="region.test_trial")
+    assert "lore.mirror_spirit" not in dict(lore.select(GAME["lore"], trial, GAME["ruleset"]))  # 階級不夠
+    adept = lore.select(GAME["lore"], dict(trial, tier_index=1), GAME["ruleset"], tag="heart_demon", k=1)
+    assert adept[0][0] == "lore.mirror_spirit"
+    ref = lore.reference(town, GAME["lore"]["sources"])
+    wolf = ref["entries"][0]
+    assert wolf["source"] == "The Old Bestiary · Woods" and wolf["verified"] and wolf["usage_idea"]
+    assert "Never invent a source" in ref["note"]
+
+
+def test_lore_goes_in_the_request_not_the_cached_system_prompt():
+    llm = FakeLLM(director=lambda m: REPLY)
+    d = Director(GAME, llm, max_retries=0)
+    for region in ("region.test_town", "region.test_trial"):
+        try:
+            d.generate(STATE, "s", region=region)
+        except DirectorError:
+            pass  # 範例回覆不屬於試煉地區，驗證失敗無妨；這裡只看送出的提示
+    first, second = llm.calls[0][1], llm.calls[1][1]
+    assert first[0]["content"] == second[0]["content"]
+    assert "lore.grey_wolf" in first[-1]["content"] and "lore.grey_wolf" not in second[-1]["content"]
+
+
+def test_check_lore_reports_bad_refs():
+    bad = {"sources": {}, "entries": {"lore.x": {"name": "X", "summary": "",
+           "quote": {"source": "src.none"}, "hooks": {"regions": ["region.nowhere"], "tier_min": "god"}}}}
+    errs = validate.check_lore(bad, GAME["ruleset"], GAME["catalog"])
+    assert len(errs) == 4
+    assert validate.check_lore(GAME["lore"], GAME["ruleset"], GAME["catalog"]) == []

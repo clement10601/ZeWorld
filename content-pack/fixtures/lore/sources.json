@@ -1,0 +1,5 @@
+{
+  "_comment": "典籍出處。條目的 quote.source／basis.source 要指向這裡的 id。",
+  "src.bestiary": { "title": "The Old Bestiary", "era": "fixture" },
+  "src.almanac": { "title": "Farmer's Almanac", "era": "fixture" }
+}

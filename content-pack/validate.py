@@ -208,7 +208,42 @@ def load_game(manifest_path):
         "banned_words": [w.strip() for w in read("banned_words", "").splitlines()
                          if w.strip() and not w.startswith("#")],
         "packs_dir": root / m.get("packs", "packs"),
+        "lore": load_lore(root / m["lore"]) if "lore" in m else None,
     }
+
+
+def load_lore(lore_dir):
+    """典籍資料夾：sources.json 是出處，其他 *.json 是以 id 為鍵的條目。鍵以 _ 開頭的是註解。"""
+    lore_dir = Path(lore_dir)
+    sources_file = lore_dir / "sources.json"
+    sources = json.loads(sources_file.read_text(encoding="utf-8")) if sources_file.exists() else {}
+    entries = {}
+    for f in sorted(lore_dir.glob("*.json")):
+        if f.name != "sources.json":
+            entries.update(json.loads(f.read_text(encoding="utf-8")))
+    strip = lambda d: {k: v for k, v in d.items() if not k.startswith("_")}
+    return {"sources": strip(sources), "entries": strip(entries)}
+
+
+def check_lore(lore, ruleset, catalog):
+    """導演會引用條目的名稱、摘要與出處，所以出處必須存在，地區與境界必須是遊戲裡有的。"""
+    errors = []
+    tiers, regions = ruleset.get("tiers", []), catalog.get("regions", {})
+    for key, e in lore["entries"].items():
+        for field in ("name", "summary"):
+            if not e.get(field):
+                errors.append(f"lore {key}: 缺 {field}")
+        for label in ("quote", "basis"):
+            ref = e.get(label)
+            if ref and ref.get("source") not in lore["sources"]:
+                errors.append(f"lore {key}: {label}.source {ref.get('source')!r} 不在 sources.json")
+        hooks = e.get("hooks", {})
+        for r in hooks.get("regions", []):
+            if regions and r not in regions:
+                errors.append(f"lore {key}: 地區 {r} 不在遊戲素材目錄")
+        if hooks.get("tier_min") and hooks["tier_min"] not in tiers:
+            errors.append(f"lore {key}: tier_min {hooks['tier_min']} 不在 ruleset")
+    return errors
 
 
 def check_catalog(pack, catalog):
@@ -271,14 +306,20 @@ if __name__ == "__main__":
     src.add_argument("--ruleset")
     ap.add_argument("packs", nargs="*", help="省略時檢查遊戲清單裡的 packs 資料夾")
     args = ap.parse_args()
+    failed = 0
     if args.game:
         game = load_game(args.game)
         ruleset, catalog, banned = game["ruleset"], game["catalog"], game["banned_words"]
         packs = args.packs or sorted(map(str, game["packs_dir"].glob("*.json")))
+        if game["lore"] is not None:
+            errs = check_lore(game["lore"], ruleset, catalog)
+            print(("OK   " if not errs else "FAIL ") + f"lore（{len(game['lore']['entries'])} 筆）")
+            for e in errs:
+                print("     - " + e)
+            failed += bool(errs)
     else:
         ruleset, catalog, banned = json.loads(Path(args.ruleset).read_text(encoding="utf-8")), None, ()
         packs = args.packs
-    failed = 0
     for p in packs:
         errs = validate(p, ruleset, catalog, banned)
         print(("OK   " if not errs else "FAIL ") + p)

@@ -57,7 +57,7 @@ def banned_rule(words):
     return "\n- Never use these words anywhere in player-facing text: " + "、".join(words) if words else ""
 
 
-def director_messages(game, state, profile, request, example=None, taken_ids=()):
+def director_messages(game, state, profile, request, example=None, taken_ids=(), lore_reference=None):
     system = DIRECTOR_RULES.format(
         language=game["language"],
         ruleset=json.dumps(game["ruleset"], ensure_ascii=False),
@@ -73,6 +73,8 @@ def director_messages(game, state, profile, request, example=None, taken_ids=())
     # history 已整理進 player_profile，不再重複帶完整紀錄
     world = {k: v for k, v in state.items() if k != "history"}
     req = {"player_profile": profile, "world_state": world, "request": request}
+    if lore_reference:
+        req["lore_reference"] = lore_reference
     if taken_ids:
         req["pack_ids_already_used"] = sorted(taken_ids)
     msgs.append({"role": "user", "content": json.dumps(req, ensure_ascii=False)})
