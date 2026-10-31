@@ -1,0 +1,11 @@
+{
+  "_comment": "遊戲清單：導演與驗證器從這裡找到遊戲的 ruleset 與素材目錄。路徑相對於本檔。",
+  "game": "zeworld-fixture",
+  "language": "en",
+  "ruleset": "ruleset.json",
+  "chunks": "chunks.json",
+  "loot": "loot.json",
+  "actor_templates": "actors.json",
+  "style": "style.md",
+  "packs": "packs"
+}

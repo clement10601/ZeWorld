@@ -26,6 +26,9 @@ func _initialize() -> void:
 		"test_once_pack_not_repeated",
 		"test_trial_on_tier_up",
 		"test_live_rewrite_and_fallback",
+		"test_async_rewrite",
+		"test_followup_flag_and_generated_pack",
+		"test_save_and_load",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -179,3 +182,69 @@ func test_live_rewrite_and_fallback() -> void:
 	log2["runner"].line_rewriter = func(_t, _n, _p, _s): return ""
 	log2["runner"].start()
 	expect(log2["lines"][0][1]["text"] == "You helped me before.", "empty rewrite falls back to authored line")
+
+
+func test_async_rewrite() -> void:
+	var s = rescue_ready_state()
+	var log := run(pack("pack.test.rescue"), s)
+	var r = log["runner"]
+	var updates := []
+	r.line_updated.connect(func(id, line): updates.append([id, line]))
+	r.start()
+	expect(log["lines"][0][1]["text"] == "You helped me before.", "authored line shown first")
+	expect(r.apply_rewrite("a1", "Friend, you saved me once."), "rewrite for current line accepted")
+	expect(updates.size() == 1 and updates[0][1]["text"] == "Friend, you saved me once." and updates[0][1]["speaker_name"] == log["lines"][0][1]["speaker_name"], "line_updated carries full line")
+	r.advance()
+	expect(not r.apply_rewrite("a1", "too late"), "stale rewrite dropped after advancing")
+	expect(updates.size() == 1, "no update for stale rewrite")
+
+
+## 導演產出的後續內容包：引擎在 request_followup 時立旗標，導演把等待天數條件加在旗標上。
+func test_followup_flag_and_generated_pack() -> void:
+	var s = rescue_ready_state()
+	var log := run(pack("pack.test.rescue"), s)
+	var r = log["runner"]
+	r.start()
+	r.advance()
+	r.advance()
+	r.choose(0)
+	r.notify({"type": "actor_defeated", "actor": "bandit"})
+	var f: Dictionary = s.followups[0]
+	expect(f["flag"] == "followup:pack.test.rescue" and s.flags.get(f["flag"]) == true, "followup sets its flag")
+	expect(s.pending_followups().size() == 1, "followup pending")
+	f["status"] = "requested"
+	expect(s.pending_followups().is_empty(), "requested followup no longer pending")
+	var gen = JSON.parse_string(FileAccess.get_file_as_string(fixtures.path_join("director/bandit_grudge.json")))
+	gen["schema_version"] = "0.2"
+	gen["id"] = "pack.gen.bandit_grudge.abc123"
+	gen["meta"]["personalized_for"] = "save.test"
+	gen["trigger"]["all"] = [{"type": "flag", "key": f["flag"], "equals": true}, {"type": "days_since_flag", "key": f["flag"], "days": 5}] + gen["trigger"]["all"]
+	var dir := "user://zeworld_test_generated"
+	expect(PackPool.save_pack(gen, dir), "generated pack saved")
+	var loaded := PackPool.load_dir(dir)
+	expect(loaded.size() == 1 and loaded[0]["id"] == gen["id"], "generated pack loads back")
+	expect(PackPool.for_save(loaded, "save.other").is_empty(), "other saves do not see it")
+	var mine := PackPool.for_save(loaded + pool, "save.test")
+	expect(mine.size() == 3, "own and shared packs kept")
+	s.map_tags = ["forest"]
+	s.time_of_day = "night"
+	expect(TriggerJudge.pick(mine, s, {"type": "enter_map"}).is_empty(), "generated pack waits out after_days")
+	s.day += 5
+	expect(TriggerJudge.pick(mine, s, {"type": "enter_map"}).get("id") == gen["id"], "generated pack triggers after the wait")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir.path_join(gen["id"] + ".json")))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir))
+
+
+func test_save_and_load() -> void:
+	var s = rescue_ready_state()
+	s.save_id = "save.test"
+	s.add_karma("order", 7)
+	s.followups.append({"hint": "h", "after_days": 1, "from_pack": "p", "day": 2, "flag": "followup:p", "status": "requested"})
+	var path := "user://zeworld_test_save.json"
+	expect(s.save_file(path), "save written")
+	var t = WorldState.new(ruleset)
+	expect(t.load_file(path), "save read")
+	expect(t.save_id == "save.test" and t.day == 2 and t.karma["order"] == 7 and t.flags["helped_stranger"] == true, "state round-trips")
+	expect(t.followups[0]["status"] == "", "unanswered request goes back to pending")
+	expect(not WorldState.new(ruleset).load_file("user://missing.json"), "missing save returns false")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

@@ -9,6 +9,8 @@ signal actor_spawned(actor: Dictionary)
 signal actor_despawned(actor_id: String)
 ## 顯示一句台詞。line = {speaker, speaker_name, text, live_rewrite, choices: [{index, text}]}
 signal line_shown(node_id: String, line: Dictionary)
+## 非同步改寫的台詞到了（apply_rewrite），line 與 line_shown 同格式
+signal line_updated(node_id: String, line: Dictionary)
 signal dialogue_ended
 signal objective_changed(text: String)
 ## give_loot、grant_exp：數值由遊戲依自己的掉落表與階級換算
@@ -20,7 +22,8 @@ signal finished(result: String)
 
 var pack: Dictionary
 var state
-## 選用：即時改寫台詞，簽名 (text, node, pack, state) -> String。失敗或未設定時用預寫台詞。
+## 選用：同步改寫台詞，簽名 (text, node, pack, state) -> String。失敗或未設定時用預寫台詞。
+## 走網路的改寫請用非同步：先顯示預寫台詞，回覆到了再呼叫 apply_rewrite。
 var line_rewriter: Callable
 
 var running := false
@@ -34,6 +37,7 @@ var reached_points: Dictionary = {}
 
 var _actors: Dictionary = {}
 var _visible_choices: Array = []
+var _line: Dictionary = {}
 var _checking := false
 var _dirty := false
 
@@ -95,6 +99,15 @@ func choose(index: int) -> void:
 	push_warning("ZeWorld: choice %d is not available" % index)
 
 
+## 非同步改寫的台詞回來時呼叫。玩家已經翻到別句就丟掉，回傳是否採用。
+func apply_rewrite(node_id: String, text: String) -> bool:
+	if not running or node_id != current_node or text == "":
+		return false
+	_line["text"] = text
+	line_updated.emit(node_id, _line.duplicate(true))
+	return true
+
+
 func objective() -> String:
 	var stages: Array = pack["stages"]
 	return stages[stage_index]["objective"] if stage_index >= 0 and stage_index < stages.size() else ""
@@ -126,13 +139,14 @@ func _show_node(id: String) -> void:
 		if rewritten is String and rewritten != "":
 			text = rewritten
 	var speaker: String = node["speaker"]
-	line_shown.emit(id, {
+	_line = {
 		"speaker": speaker,
 		"speaker_name": _actors[speaker]["name"] if _actors.has(speaker) else speaker,
 		"text": text,
 		"live_rewrite": node.get("live_rewrite", false),
 		"choices": _visible_choices.duplicate(true),
-	})
+	}
+	line_shown.emit(id, _line.duplicate(true))
 	_apply_all(node.get("effects", []))
 	_check_progress()
 
@@ -208,11 +222,16 @@ func _apply(e: Dictionary) -> void:
 		"remember":
 			state.remember(e["npc"], e["text"])
 		"request_followup":
+			# 旗標讓導演生成的後續內容包能用 days_since_flag 計算等待天數
+			var flag: String = "followup:" + pack["id"]
+			state.set_flag(flag, true)
 			state.followups.append({
 				"hint": e["hint"],
 				"after_days": int(e.get("after_days", 0)),
 				"from_pack": pack["id"],
 				"day": state.day,
+				"flag": flag,
+				"status": "",
 			})
 		"give_loot", "grant_exp":
 			reward_requested.emit(e)

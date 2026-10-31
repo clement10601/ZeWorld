@@ -23,6 +23,8 @@ static func load_file(path: String) -> Dictionary:
 
 static func load_dir(dir_path: String) -> Array:
 	var pool: Array = []
+	if not DirAccess.dir_exists_absolute(dir_path):
+		return pool
 	for file in DirAccess.get_files_at(dir_path):
 		if file.ends_with(".json"):
 			var pack := load_file(dir_path.path_join(file))
@@ -34,3 +36,18 @@ static func load_dir(dir_path: String) -> Array:
 static func load_ruleset(path: String) -> Dictionary:
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
 	return data if data is Dictionary else {}
+
+
+## 只留通用內容包與屬於這個存檔的個人化內容包。
+static func for_save(pool: Array, save_id: String) -> Array:
+	return pool.filter(func(p): return p["meta"].get("personalized_for", "") in ["", save_id])
+
+
+## 把導演產出的內容包存進資料夾（例如 user://generated），下次啟動用 load_dir 讀回。
+static func save_pack(pack: Dictionary, dir_path: String) -> bool:
+	DirAccess.make_dir_recursive_absolute(dir_path)
+	var f := FileAccess.open(dir_path.path_join(pack["id"] + ".json"), FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(pack, "  "))
+	return true
