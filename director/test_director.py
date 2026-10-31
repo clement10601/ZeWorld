@@ -395,3 +395,28 @@ def test_access_usage_can_live_outside_readonly_codes_dir(tmp_path):
     finally:
         secret.chmod(stat.S_IRWXU)
         os.chmod(secret / "codes.json", stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_cors_preflight_and_headers():
+    d = Director(GAME, FakeLLM(director=[], dialogue=lambda m: "x"))
+    server = make_server(d, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_port}/v1"
+    try:
+        req = urllib.request.Request(base + "/packs/generate", method="OPTIONS",
+                                     headers={"Origin": "https://play.example", "Access-Control-Request-Method": "POST"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            assert r.status == 204
+            assert r.headers["Access-Control-Allow-Origin"] == "*"
+            assert "Authorization" in r.headers["Access-Control-Allow-Headers"]
+        with urllib.request.urlopen(base + "/health", timeout=5) as r:
+            assert r.headers["Access-Control-Allow-Origin"] == "*"
+    finally:
+        server.shutdown()
+    quiet = make_server(d, port=0, cors_origin="")
+    threading.Thread(target=quiet.serve_forever, daemon=True).start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{quiet.server_port}/v1/health", timeout=5) as r:
+            assert r.headers.get("Access-Control-Allow-Origin") is None
+    finally:
+        quiet.shutdown()

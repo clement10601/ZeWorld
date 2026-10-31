@@ -9,6 +9,10 @@ POST /v1/judge/rank       {"state": {...}, "packs": [pack, ...], "moment": {...}
                           -> 200 {"scores": {pack_id: {"fit": 0-4, "confidence": 0-1}}, "model": "..."}
                           | 503 沒設決策模型 | 502 決策模型失敗
 GET  /v1/health           -> 200 {"ok": true, "game": "...", "auth": bool}
+OPTIONS *                 -> 204 CORS 預檢（網頁版遊戲從別的網域呼叫導演）
+
+每個回應都帶 Access-Control-Allow-Origin（預設 *）。存取碼走 Authorization 標頭、不用 cookie，
+所以開放來源不會讓別的網站冒用測試者的額度；要收緊就給 cors_origin 一個網址。
 
 給了 access（director/access.py 的 AccessCodes）時，POST 要帶 Authorization: Bearer <存取碼>，
 沒帶或無效回 401，超過當日上限回 429。生成算 packs、台詞改寫算 lines、評分算 judges。
@@ -27,14 +31,29 @@ LOOPBACK = ("127.0.0.1", "localhost", "::1")
 ROUTES = {"/v1/packs/generate": "packs", "/v1/dialogue/rewrite": "lines", "/v1/judge/rank": "judges"}
 
 
-def make_server(director, host="127.0.0.1", port=8765, access=None, judge=None):
+def make_server(director, host="127.0.0.1", port=8765, access=None, judge=None, cors_origin="*"):
     if access is None and host not in LOOPBACK:
         raise ValueError("serving beyond localhost needs access codes (--access-codes)")
 
     class Handler(BaseHTTPRequestHandler):
+        def _cors(self):
+            if cors_origin:
+                self.send_header("Access-Control-Allow-Origin", cors_origin)
+                self.send_header("Vary", "Origin")
+
+        def do_OPTIONS(self):
+            self.send_response(204)
+            self._cors()
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Max-Age", "86400")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def _send(self, code, body):
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
+            self._cors()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()

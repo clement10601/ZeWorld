@@ -43,6 +43,8 @@ def main(argv=None):
                     help="serve：存取碼檔（python -m director.access 建立）。架在 localhost 以外時必填")
     ap.add_argument("--usage", default=os.environ.get("ZEWORLD_DIRECTOR_USAGE"),
                     help="serve：用量檔；沒給時寫在存取碼檔旁的 <檔名>.usage.json（存取碼檔唯讀時要給）")
+    ap.add_argument("--cors-origin", default=os.environ.get("ZEWORLD_DIRECTOR_CORS_ORIGIN", "*"),
+                    help="serve：允許哪個網頁來源呼叫導演（網頁版遊戲用）。預設 *；給空字串就不送 CORS 標頭")
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--fake-pack", help="假導演：每次都回這個檔案的內容")
     ap.add_argument("--fake-line", help="假台詞模型：每次都回這句")
@@ -63,7 +65,7 @@ def main(argv=None):
         if access is not None and not access.codes:
             sys.exit(f"存取碼檔 {args.access_codes} 沒有任何存取碼：先用 python -m director.access add 新增")
         try:
-            server = make_server(director, args.host, args.port, access, DecisionJudge.from_env())
+            server = make_server(director, args.host, args.port, access, DecisionJudge.from_env(), args.cors_origin)
         except ValueError:
             sys.exit("架在 localhost 以外需要存取碼：加上 --access-codes codes.json")
         auth = f"，{len(access.codes)} 組存取碼" if access else "，不驗存取碼"
