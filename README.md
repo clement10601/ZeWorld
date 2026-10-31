@@ -92,6 +92,7 @@ export ZEWORLD_JUDGE_API_KEY=...                       # OpenRouter 金鑰，只
 - `POST /v1/judge/rank` 回傳 `{scores: {內容包 id: {fit, confidence}}}`。沒設金鑰時回 503，模型失敗時回 502。用存取碼時，評分次數另外計算（`daily_judges`，預設每人每天 2000 次）。
 - Godot 端：`DirectorClient.request_ranking(state, packs, moment)` 會發出 `ranking_ready(fits)`，把 `fits` 傳給 `TriggerJudge.pick(pool, state, event, fits)`。排序依據是 `priority + 10 × (fit − 2)`，沒有分數的內容包算 2，所以沒接決策模型時等同純 priority 排序。
 - 評分建議在進地區、過一天時先算好，觸發當下直接用快取，玩家不用等。
+- 用真模型實測（會花額度）：`python -m director.judge_bench --game ../Zetas/zeworld.json --scenarios ../Zetas/tests/director/judge_scenarios.json --runs 3`，印出每個情境的排序、是否符合預期、延遲、輸入 token 與花費。加 `--fake` 只檢查情境檔。
 
 ### 架在網路上給測試者用：存取碼與用量上限
 

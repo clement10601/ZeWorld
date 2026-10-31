@@ -340,3 +340,16 @@ def test_judge_ranks_candidates_over_http(tmp_path):
         assert e.code == 503
     finally:
         plain.shutdown()
+
+
+def test_judge_bench_runs_with_fake_judge(tmp_path):
+    from director import judge_bench
+    from director.judge import FakeJudge
+    root = FIX
+    scen = [{"name": "rescued", "state": STATE, "candidates": ["packs/rescue.json", "packs/trial.json"],
+             "expect_top": "pack.test.trial"}]
+    loaded = [dict(scen[0], packs=[json.loads((root / p).read_text(encoding="utf-8")) for p in scen[0]["candidates"]])]
+    trial_title = loaded[0]["packs"][1]["meta"]["title"]
+    report = judge_bench.run(GAME, loaded, FakeJudge({trial_title: 3.5}), runs=2)
+    assert report[0]["passed"] == 2 and report[0]["runs"][0]["top"] == "pack.test.trial"
+    assert "2/2" in judge_bench.summary(report, "fake")
