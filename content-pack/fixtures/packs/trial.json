@@ -1,0 +1,35 @@
+{
+  "schema_version": "0.2",
+  "id": "pack.test.trial",
+  "kind": "scene",
+  "meta": {
+    "title": "Trial",
+    "summary": "On reaching adept, the player faces a mirror of themselves.",
+    "tier_range": { "min": "novice", "max": "adept" },
+    "author": "human"
+  },
+  "trigger": { "all": [{ "type": "tier_up", "to": "adept" }], "priority": 100 },
+  "map": {
+    "chunks": [{ "chunk": "chunk.test_entry", "order": 0 }, { "chunk": "chunk.test_arena", "order": 1 }],
+    "spawn": "pt.start",
+    "points": ["pt.start", "pt.square", "pt.arena", "pt.exit"]
+  },
+  "actors": [
+    { "id": "mirror", "template": "boss.test", "name": "Mirror", "disposition": "hostile", "spawn": "on_effect", "spawn_at": "pt.arena" }
+  ],
+  "dialogue": {
+    "entry": "m1",
+    "nodes": {
+      "m1": { "speaker": "narrator", "text": "The world goes dark.", "next": "m2" },
+      "m2": { "speaker": "mirror", "text": "You cannot outrun yourself.", "live_rewrite": true }
+    }
+  },
+  "stages": [
+    { "id": "s1", "objective": "Reach the square", "complete_when": [{ "type": "reach_point", "point": "pt.square" }], "on_complete": [{ "type": "start_dialogue", "node": "m1" }] },
+    { "id": "s2", "objective": "Defeat the mirror", "on_enter": [{ "type": "spawn_actor", "actor": "mirror" }], "complete_when": [{ "type": "actor_defeated", "actor": "mirror" }] }
+  ],
+  "outcomes": {
+    "on_complete": [{ "type": "set_flag", "key": "trial_cleared", "value": true }, { "type": "grant_exp", "amount": "large" }, { "type": "teleport", "point": "pt.exit" }],
+    "on_fail": [{ "type": "set_flag", "key": "trial_failed", "value": true }]
+  }
+}

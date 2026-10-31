@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.2",
+  "id": "pack.test.rescue",
+  "kind": "event",
+  "meta": {
+    "title": "Rescue",
+    "summary": "A stranger the player helped returns at night, chased by a bandit.",
+    "tags": ["test"],
+    "tier_range": { "min": "novice", "max": "adept" },
+    "author": "human"
+  },
+  "trigger": {
+    "all": [
+      { "type": "flag", "key": "helped_stranger", "equals": true },
+      { "type": "days_since_flag", "key": "helped_stranger", "days": 2 },
+      { "type": "enter_map", "map_tag": "town" },
+      { "type": "time_of_day", "in": ["night"] }
+    ],
+    "once": true,
+    "priority": 80
+  },
+  "map": {
+    "chunks": [{ "chunk": "chunk.test_street", "order": 0 }],
+    "spawn": "pt.left",
+    "points": ["pt.left", "pt.center", "pt.right"]
+  },
+  "actors": [
+    { "id": "stranger", "template": "npc.test", "name": "Stranger", "disposition": "friendly", "spawn_at": "pt.center", "memory_key": "npc.stranger" },
+    { "id": "bandit", "template": "mob.test", "name": "Bandit", "disposition": "hostile", "spawn": "on_effect", "spawn_at": "pt.right", "power": 1.2 }
+  ],
+  "dialogue": {
+    "entry": "a1",
+    "nodes": {
+      "a1": { "speaker": "stranger", "text": "You helped me before.", "live_rewrite": true, "next": "a2" },
+      "a2": { "speaker": "bandit", "text": "Found you!", "effects": [{ "type": "spawn_actor", "actor": "bandit" }], "next": "a3" },
+      "a3": {
+        "speaker": "narrator",
+        "text": "The bandit draws a blade.",
+        "choices": [
+          { "text": "Protect", "next": "a_help", "effects": [{ "type": "add_karma", "axis": "mercy", "delta": 5 }] },
+          { "text": "Walk away", "next": "a_leave", "effects": [{ "type": "change_relation", "npc": "npc.stranger", "delta": -30 }] },
+          { "text": "Hand them over", "next": "a_betray", "show_if": [{ "type": "karma", "axis": "order", "op": ">=", "value": 30 }] }
+        ]
+      },
+      "a_help": { "speaker": "player", "text": "Not today." },
+      "a_leave": { "speaker": "stranger", "text": "I see.", "effects": [{ "type": "end_pack", "result": "abandon" }] },
+      "a_betray": { "speaker": "stranger", "text": "You!", "effects": [{ "type": "add_karma", "axis": "order", "delta": 10 }, { "type": "end_pack", "result": "fail" }] }
+    }
+  },
+  "stages": [
+    { "id": "s1", "objective": "Talk", "on_enter": [{ "type": "start_dialogue", "node": "a1" }], "complete_when": [{ "type": "dialogue_reached", "node": "a_help" }] },
+    { "id": "s2", "objective": "Defeat the bandit", "complete_when": [{ "type": "actor_defeated", "actor": "bandit" }] }
+  ],
+  "outcomes": {
+    "on_complete": [
+      { "type": "change_relation", "npc": "npc.stranger", "delta": 25 },
+      { "type": "remember", "npc": "npc.stranger", "text": "They fought for me." },
+      { "type": "set_flag", "key": "stranger_ally", "value": true },
+      { "type": "give_loot", "loot_table": "loot.test", "tier": "rare" },
+      { "type": "request_followup", "hint": "The bandit gang holds a grudge.", "after_days": 5 }
+    ],
+    "on_fail": [{ "type": "set_flag", "key": "stranger_captured", "value": true }],
+    "on_abandon": [{ "type": "request_followup", "hint": "The stranger disappears.", "after_days": 10 }]
+  }
+}

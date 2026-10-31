@@ -1,0 +1,972 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/clement10601/ZeWorld/content-pack/schema.json",
+  "title": "ZeWorld Content Pack",
+  "description": "導演（LLM）或人工產出的一個可獨立載入的事件／場景。客戶端只讀資料、不執行程式碼。所有可執行行為都必須是 effects / conditions 列舉中的型別。題材相關的名稱（tier 階級、karma 軸、時段）由遊戲的 ruleset.json 定義，validate.py --ruleset 檢查。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "meta",
+    "trigger",
+    "stages",
+    "outcomes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.2"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^pack\\.[a-z0-9_.-]{3,64}$"
+    },
+    "kind": {
+      "enum": [
+        "event",
+        "scene",
+        "encounter",
+        "dialogue"
+      ],
+      "description": "event=多階段事件；scene=新地圖區域（秘境）；encounter=單場奇遇或戰鬥；dialogue=純對話"
+    },
+    "meta": {
+      "$ref": "#/$defs/meta"
+    },
+    "trigger": {
+      "$ref": "#/$defs/trigger"
+    },
+    "requires_assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset_ref"
+      },
+      "description": "載入前必須就緒的素材；缺素材且無 fallback 的內容包不得入池"
+    },
+    "map": {
+      "$ref": "#/$defs/map"
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/actor"
+      },
+      "maxItems": 12
+    },
+    "dialogue": {
+      "$ref": "#/$defs/dialogue"
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stage"
+      },
+      "minItems": 1,
+      "maxItems": 8
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "on_complete"
+      ],
+      "properties": {
+        "on_complete": {
+          "$ref": "#/$defs/effects"
+        },
+        "on_fail": {
+          "$ref": "#/$defs/effects"
+        },
+        "on_abandon": {
+          "$ref": "#/$defs/effects"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "summary",
+        "tier_range",
+        "author"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "給判斷器排序與向量檢索用的一句話摘要"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 12
+        },
+        "region": {
+          "type": "string",
+          "description": "地區 id，例如 region.qingyun_foothills"
+        },
+        "author": {
+          "enum": [
+            "director",
+            "human"
+          ]
+        },
+        "source_model": {
+          "type": "string"
+        },
+        "personalized_for": {
+          "type": "string",
+          "description": "單機版為存檔 id；空值代表通用內容包"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "tier_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "$ref": "#/$defs/tier"
+            },
+            "max": {
+              "$ref": "#/$defs/tier"
+            }
+          }
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "enter_map"
+            },
+            "map_tag": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "map_tag"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "tier_at_least"
+            },
+            "tier": {
+              "$ref": "#/$defs/tier"
+            }
+          },
+          "required": [
+            "tier"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "tier_up"
+            },
+            "to": {
+              "$ref": "#/$defs/tier"
+            }
+          },
+          "required": [
+            "to"
+          ],
+          "additionalProperties": false,
+          "description": "只在升階事件當下成立"
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "flag"
+            },
+            "key": {
+              "type": "string"
+            },
+            "equals": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "equals"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "karma"
+            },
+            "axis": {
+              "$ref": "#/$defs/karma_axis"
+            },
+            "op": {
+              "enum": [
+                ">=",
+                "<="
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "minimum": -100,
+              "maximum": 100
+            }
+          },
+          "required": [
+            "axis",
+            "op",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "relation"
+            },
+            "npc": {
+              "type": "string"
+            },
+            "op": {
+              "enum": [
+                ">=",
+                "<="
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "minimum": -100,
+              "maximum": 100
+            }
+          },
+          "required": [
+            "npc",
+            "op",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "time_of_day"
+            },
+            "in": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "description": "時段名稱，必須出現在 ruleset.times_of_day"
+            }
+          },
+          "required": [
+            "in"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "killed"
+            },
+            "monster_tag": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "monster_tag",
+            "count"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "has_item"
+            },
+            "item": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "item"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "reach_point"
+            },
+            "point": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "point"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "dialogue_reached"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "node"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "actor_defeated"
+            },
+            "actor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actor"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "days_since_flag"
+            },
+            "key": {
+              "type": "string"
+            },
+            "days": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "key",
+            "days"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/condition"
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "all"
+      ],
+      "properties": {
+        "all": {
+          "$ref": "#/$defs/conditions",
+          "description": "全部成立才觸發"
+        },
+        "any": {
+          "$ref": "#/$defs/conditions",
+          "description": "若有，至少一個成立"
+        },
+        "once": {
+          "type": "boolean",
+          "default": true
+        },
+        "cooldown_hours": {
+          "type": "number",
+          "minimum": 0,
+          "description": "遊戲內時數"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50
+        },
+        "expires_after_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "個人化內容包過期後不再觸發"
+        }
+      }
+    },
+    "asset_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "chunk",
+            "sprite",
+            "portrait",
+            "bgm",
+            "sfx",
+            "voice",
+            "vfx"
+          ]
+        },
+        "fallback": {
+          "type": "string",
+          "description": "素材缺失時改用的通用素材 id"
+        }
+      }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunks",
+        "spawn"
+      ],
+      "properties": {
+        "base_map": {
+          "type": "string",
+          "description": "掛在既有地圖上時填；新秘境留空"
+        },
+        "chunks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "chunk",
+              "order"
+            ],
+            "properties": {
+              "chunk": {
+                "type": "string"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "flip": {
+                "type": "boolean"
+              }
+            }
+          },
+          "description": "橫軸區塊由左到右依 order 拼接；區塊必須來自遊戲的區塊庫"
+        },
+        "spawn": {
+          "type": "string",
+          "description": "出生點 id，需存在於某個區塊"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bgm": {
+          "type": "string"
+        },
+        "ambience": {
+          "type": "string"
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "template",
+        "name",
+        "disposition"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "template": {
+          "type": "string",
+          "description": "遊戲素材庫中的角色或怪物模板 id"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 12
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "palette": {
+          "type": "string",
+          "description": "換色方案 id"
+        },
+        "disposition": {
+          "enum": [
+            "hostile",
+            "friendly",
+            "neutral"
+          ]
+        },
+        "power": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2.0,
+          "description": "相對於該境界標準強度的倍率"
+        },
+        "spawn_at": {
+          "type": "string"
+        },
+        "persona": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "給即時對話模型的角色設定"
+        },
+        "memory_key": {
+          "type": "string",
+          "description": "對應世界狀態中的 NPC 記憶；重複出現的 NPC 必填"
+        },
+        "spawn": {
+          "enum": [
+            "on_start",
+            "on_effect"
+          ],
+          "default": "on_start",
+          "description": "on_effect 表示等 spawn_actor 效果才出場"
+        }
+      }
+    },
+    "dialogue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry",
+        "nodes"
+      ],
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "nodes": {
+          "type": "object",
+          "maxProperties": 40,
+          "additionalProperties": {
+            "$ref": "#/$defs/dialogue_node"
+          }
+        }
+      }
+    },
+    "dialogue_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "speaker",
+        "text"
+      ],
+      "properties": {
+        "speaker": {
+          "type": "string",
+          "description": "actor id，或 player、narrator"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "預寫台詞，也是即時改寫失敗時的降級版本"
+        },
+        "live_rewrite": {
+          "type": "boolean",
+          "default": false,
+          "description": "true 時觸發當下用小模型依玩家近況改寫，語意不可偏離 text"
+        },
+        "voice": {
+          "type": "string"
+        },
+        "effects": {
+          "$ref": "#/$defs/effects"
+        },
+        "next": {
+          "type": "string"
+        },
+        "choices": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "text",
+              "next"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "next": {
+                "type": "string"
+              },
+              "show_if": {
+                "$ref": "#/$defs/conditions"
+              },
+              "effects": {
+                "$ref": "#/$defs/effects"
+              }
+            }
+          }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "objective",
+        "complete_when"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "objective": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "complete_when": {
+          "$ref": "#/$defs/conditions"
+        },
+        "fail_when": {
+          "$ref": "#/$defs/conditions"
+        },
+        "on_enter": {
+          "$ref": "#/$defs/effects"
+        },
+        "on_complete": {
+          "$ref": "#/$defs/effects"
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "set_flag"
+            },
+            "key": {
+              "type": "string"
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "add_karma"
+            },
+            "axis": {
+              "$ref": "#/$defs/karma_axis"
+            },
+            "delta": {
+              "type": "integer",
+              "minimum": -20,
+              "maximum": 20
+            }
+          },
+          "required": [
+            "axis",
+            "delta"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "change_relation"
+            },
+            "npc": {
+              "type": "string"
+            },
+            "delta": {
+              "type": "integer",
+              "minimum": -30,
+              "maximum": 30
+            }
+          },
+          "required": [
+            "npc",
+            "delta"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "give_loot"
+            },
+            "loot_table": {
+              "type": "string",
+              "description": "遊戲定義的掉落表 id；引擎只轉交給遊戲處理"
+            },
+            "tier": {
+              "enum": [
+                "common",
+                "rare",
+                "epic"
+              ]
+            }
+          },
+          "required": [
+            "loot_table",
+            "tier"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "take_item"
+            },
+            "item": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "item",
+            "count"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "grant_exp"
+            },
+            "amount": {
+              "enum": [
+                "small",
+                "medium",
+                "large"
+              ],
+              "description": "實際數值由遊戲依階級換算"
+            }
+          },
+          "required": [
+            "amount"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "spawn_actor"
+            },
+            "actor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actor"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "despawn_actor"
+            },
+            "actor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "actor"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "start_dialogue"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "node"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "remember"
+            },
+            "npc": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "npc",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "request_followup"
+            },
+            "hint": {
+              "type": "string",
+              "maxLength": 200,
+              "description": "交給導演的後續劇情提示，例如『狐妖數日後來報恩』"
+            },
+            "after_days": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "hint"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "play_vfx"
+            },
+            "vfx": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "vfx"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "teleport"
+            },
+            "point": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "point"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "end_pack"
+            },
+            "result": {
+              "enum": [
+                "complete",
+                "fail",
+                "abandon"
+              ]
+            }
+          },
+          "required": [
+            "result"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/effect"
+      },
+      "maxItems": 12
+    },
+    "tier": {
+      "type": "string",
+      "description": "階級名稱，必須出現在 ruleset.tiers；順序即強度"
+    },
+    "karma_axis": {
+      "type": "string",
+      "description": "必須出現在 ruleset.karma_axes"
+    }
+  }
+}
