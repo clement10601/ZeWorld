@@ -21,6 +21,8 @@ var memories: Dictionary = {}    # npc memory_key -> Array[String]
 var followups: Array = []        # 交給導演的後續劇情請求；status: ""=待送、requested、ready、failed
 var seen_packs: Dictionary = {}  # pack id -> 結束時的 day
 var pack_arrivals: Dictionary = {}  # 導演送來的 pack id -> 進池的 day，trigger.expires_after_days 從這天算
+## 遊戲自用的資料（例如修為、血量），跟著存檔走；引擎不讀，會原樣出現在給導演的世界狀態裡
+var game_data: Dictionary = {}
 ## 因果紀錄：每個結束的內容包留一筆 {day, pack, title, result, choices, tags}，給導演回顧玩家做過的事
 var history: Array = []
 
@@ -101,7 +103,7 @@ func to_dict() -> Dictionary:
 		"day": day, "time_of_day": time_of_day, "tier_index": tier_index, "map_tags": map_tags, "region": region,
 		"flags": flags, "flag_days": flag_days, "karma": karma, "relations": relations,
 		"kills": kills, "items": items, "memories": memories, "followups": followups,
-		"seen_packs": seen_packs, "pack_arrivals": pack_arrivals, "history": history, "save_id": save_id,
+		"seen_packs": seen_packs, "pack_arrivals": pack_arrivals, "history": history, "game_data": game_data, "save_id": save_id,
 	}
 
 

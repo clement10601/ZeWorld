@@ -101,6 +101,11 @@ func choose(index: int) -> void:
 	push_warning("ZeWorld: choice %d is not available" % index)
 
 
+## 遊戲端結束內容包，例如玩家在戰鬥中倒下時以 fail 結算。result 為 complete、fail、abandon。
+func abort(p_result: String) -> void:
+	_finish(p_result)
+
+
 ## 非同步改寫的台詞回來時呼叫。玩家已經翻到別句就丟掉，回傳是否採用。
 func apply_rewrite(node_id: String, text: String) -> bool:
 	if not running or node_id != current_node or text == "":
