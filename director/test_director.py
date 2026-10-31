@@ -374,3 +374,24 @@ def test_bench_check_expect():
     assert [u.split(":")[0] for u in unmet] == [
         "chunk_tag", "templates", "sets_flag", "forbid_conditions", "no_extra_conditions", "region_map_tags",
         "no_meta_region", "mentions_any", "mentions_none", "max_loot"]
+
+
+def test_access_usage_can_live_outside_readonly_codes_dir(tmp_path):
+    import os
+    import stat
+    from director.access import AccessCodes
+    secret = tmp_path / "secret"
+    secret.mkdir()
+    code = AccessCodes(secret / "codes.json").add("amin")
+    (secret / "codes.json").chmod(stat.S_IRUSR)
+    secret.chmod(stat.S_IRUSR | stat.S_IXUSR)  # 像 Kubernetes Secret 一樣唯讀
+    try:
+        usage = tmp_path / "data" / "usage.json"
+        usage.parent.mkdir()
+        access = AccessCodes(secret / "codes.json", usage_path=usage)
+        assert access.charge(code, "packs") == "amin"
+        assert usage.exists() and not (secret / "codes.json.usage.json").exists()
+        assert AccessCodes(secret / "codes.json", usage_path=usage).used("amin", "packs") == 1
+    finally:
+        secret.chmod(stat.S_IRWXU)
+        os.chmod(secret / "codes.json", stat.S_IRUSR | stat.S_IWUSR)

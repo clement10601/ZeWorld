@@ -107,7 +107,7 @@ python -m director.access disable --file ~/zeworld-codes.json --name 阿明     
 python -m director serve --game ../Zetas/zeworld.json --host 0.0.0.0 --access-codes ~/zeworld-codes.json
 ```
 
-- 存取碼檔也可以用環境變數 `ZEWORLD_DIRECTOR_ACCESS_CODES` 指定。不要放進版控。用量記在旁邊的 `<檔名>.usage.json`，以 UTC 日期分天。
+- 存取碼檔也可以用環境變數 `ZEWORLD_DIRECTOR_ACCESS_CODES` 指定。不要放進版控。用量記在旁邊的 `<檔名>.usage.json`，以 UTC 日期分天。存取碼檔唯讀時（例如掛 Kubernetes Secret），用 `--usage` 或環境變數 `ZEWORLD_DIRECTOR_USAGE` 把用量寫到別處。
 - 遊戲送 `Authorization: Bearer <存取碼>`（`director_client.gd` 的 `access_code`，或環境變數 `ZEWORLD_DIRECTOR_CODE`）。沒帶或無效回 401，超過個人或合計上限回 429。遊戲端兩者都當成導演失敗，照常用手寫內容。
 - 每次生成請求算一次（含驗證失敗的重寫，因為模型已經花了錢），台詞改寫每句算一次。
 - 存取碼走 HTTP 標頭，公開網路上請放在 HTTPS 後面（例如 Caddy 反向代理或 Cloudflare Tunnel），不要直接開 HTTP 埠。
