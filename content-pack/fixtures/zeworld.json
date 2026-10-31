@@ -8,5 +8,6 @@
   "actor_templates": "actors.json",
   "regions": "regions.json",
   "style": "style.md",
-  "packs": "packs"
+  "packs": "packs",
+  "lore": "lore"
 }

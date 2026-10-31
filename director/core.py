@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from . import prompts
+from . import lore, prompts
 from ._validate import validate
 from .llm import LLMError
 from .profile import build_profile, npc_view
@@ -74,8 +74,9 @@ def followup_gate(followup):
 
 
 class Director:
-    def __init__(self, game, llm, max_retries=2, out_dir=None):
+    def __init__(self, game, llm, max_retries=2, out_dir=None, lore_k=8):
         self.game = game
+        self.lore_k = lore_k
         self.llm = llm
         self.max_retries = max_retries
         self.out_dir = Path(out_dir) if out_dir else None
@@ -118,7 +119,11 @@ class Director:
             request["expires_after_days"] = expires_after_days
             request["expiry_note"] = "The pack is only available for this many in-game days after it is delivered."
         taken = self.taken_ids()
-        messages = prompts.director_messages(self.game, state, profile, request, self.example, taken)
+        # 典籍參考每次不同，放在使用者訊息裡，系統提示才能維持快取
+        refs = lore.select(self.game.get("lore"), state, self.game["ruleset"], region, tag, self.lore_k,
+                           seed=f"{save_id}:{state.get('day', 0)}:{tag or ''}")
+        reference = lore.reference(refs, self.game["lore"]["sources"]) if refs else None
+        messages = prompts.director_messages(self.game, state, profile, request, self.example, taken, reference)
         errors = []
         for _ in range(self.max_retries + 1):
             try:

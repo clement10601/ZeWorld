@@ -1,0 +1,20 @@
+{
+  "_comment": "測試用典籍條目。",
+  "lore.grey_wolf": {
+    "name": "Grey wolf", "kind": "beast", "summary": "A wolf that hunts the town woods in winter.",
+    "tags": ["wolf", "woods"],
+    "quote": { "text": "In the woods east of town there are grey wolves.", "source": "src.bestiary", "chapter": "Woods", "verified": true },
+    "hooks": { "regions": ["region.test_town"], "idea": "A hungry pack drives hunters out of the woods." }
+  },
+  "lore.mirror_spirit": {
+    "name": "Mirror spirit", "kind": "god", "summary": "A spirit that shows travellers their own fears.",
+    "tags": ["spirit", "trial"],
+    "quote": { "text": "Who looks into it sees what they dread.", "source": "src.bestiary", "chapter": "Mirrors", "verified": false },
+    "hooks": { "regions": ["region.test_trial"], "tier_min": "adept", "request_tags": ["heart_demon"] }
+  },
+  "lore.rain_saying": {
+    "name": "Rain saying", "kind": "concept", "summary": "Swallows flying low mean rain by nightfall.",
+    "tags": ["weather"],
+    "basis": { "source": "src.almanac", "note": "Folk saying, paraphrased." }
+  }
+}

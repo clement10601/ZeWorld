@@ -32,6 +32,7 @@
   "regions": "content/regions.json",
   "style": "content/style.md",
   "banned_words": "content/banned_words.txt",
+  "lore": "content/lore",
   "packs": "content/packs"
 }
 ```
@@ -44,7 +45,7 @@
 - `ruleset` 可加 `karma_labels: {軸: [負向名稱, 正向名稱]}`，玩家側寫會用來描述傾向。
 - `ruleset` 可加獎勵上限：`loot_caps`、`exp_caps`（`{階級: 最高檔次}`，依內容包 `tier_range.min` 套用，沒列的階級沿用較低階級）、`max_loot_per_outcome`（每個結局最多幾個 `give_loot`）。
 
-`python content-pack/validate.py --game path/to/zeworld.json` 會檢查清單裡的所有內容包。
+`python content-pack/validate.py --game path/to/zeworld.json` 會檢查清單裡的所有內容包；有 `lore` 時也檢查條目的出處、地區與階級。
 
 ## 導演
 
