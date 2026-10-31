@@ -6,6 +6,7 @@
   "chunks": "chunks.json",
   "loot": "loot.json",
   "actor_templates": "actors.json",
+  "regions": "regions.json",
   "style": "style.md",
   "packs": "packs"
 }

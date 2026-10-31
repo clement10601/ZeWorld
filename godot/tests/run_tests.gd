@@ -30,6 +30,7 @@ func _initialize() -> void:
 		"test_followup_flag_and_generated_pack",
 		"test_save_and_load",
 		"test_history_records_choices",
+		"test_region_filter_and_stock",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -274,3 +275,22 @@ func test_history_records_choices() -> void:
 	t.load_file(path)
 	expect(t.history.size() == WorldState.HISTORY_LIMIT, "history survives save and load")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_region_filter_and_stock() -> void:
+	var s = rescue_ready_state()
+	var rescue: Dictionary = pack("pack.test.rescue").duplicate(true)
+	rescue["meta"]["region"] = "region.test_town"
+	var p := [rescue]
+	expect(TriggerJudge.pick(p, s)["id"] == "pack.test.rescue", "player without region sees region packs")
+	s.region = "region.test_trial"
+	expect(TriggerJudge.pick(p, s).is_empty(), "region pack stays home")
+	expect(PackPool.stock(p, s, "region.test_trial").is_empty(), "no stock in other region")
+	s.region = "region.test_town"
+	expect(TriggerJudge.pick(p, s)["id"] == "pack.test.rescue", "region pack fires at home")
+	expect(PackPool.stock(p, s, "region.test_town").size() == 1, "unseen pack counts as stock")
+	s.seen_packs["pack.test.rescue"] = 2
+	expect(PackPool.stock(p, s, "region.test_town").is_empty(), "played once-pack is not stock")
+	s.seen_packs.erase("pack.test.rescue")
+	s.tier_index = 2
+	expect(PackPool.stock(p, s, "region.test_town").is_empty(), "pack outside tier is not stock")

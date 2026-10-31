@@ -202,6 +202,7 @@ def load_game(manifest_path):
             "chunks": entries(read("chunks", {})),
             "loot": entries(read("loot", {})),
             "actor_templates": entries(read("actor_templates", {})),
+            "regions": entries(read("regions", {})),
         },
         "style": read("style", "").strip(),
         "banned_words": [w.strip() for w in read("banned_words", "").splitlines()
@@ -229,6 +230,15 @@ def check_catalog(pack, catalog):
     for where, c in walk_conditions(pack):
         if c["type"] == "enter_map" and c["map_tag"] not in tags:
             errors.append(f"{where}: 地圖標籤 {c['map_tag']} 沒有任何區塊使用")
+    regions = catalog.get("regions", {})
+    region = pack["meta"].get("region", "")
+    if regions and region:
+        if region not in regions:
+            errors.append(f"meta.region: 地區 {region} 不在遊戲素材目錄")
+        elif map_ and regions[region].get("chunks"):
+            for entry in map_["chunks"]:
+                if entry["chunk"] in chunks and entry["chunk"] not in regions[region]["chunks"]:
+                    errors.append(f"map.chunks: 區塊 {entry['chunk']} 不屬於地區 {region}")
     for a in pack.get("actors", []):
         if a["template"] not in templates:
             errors.append(f"actor {a['id']}: 模板 {a['template']} 不在遊戲素材目錄")

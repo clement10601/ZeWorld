@@ -148,3 +148,14 @@ def test_manifest_banned_words_file(tmp_path):
     m["packs"] = str(FIX / "packs")
     (tmp_path / "zeworld.json").write_text(json.dumps(m), encoding="utf-8")
     assert validate.load_game(tmp_path / "zeworld.json")["banned_words"] == ["phone", "laser"]
+
+
+def test_region_must_exist_and_own_the_chunks():
+    game = validate.load_game(FIX / "zeworld.json")
+    pack = copy.deepcopy(RESCUE)
+    pack["meta"]["region"] = "region.test_town"
+    assert validate.validate_pack(pack, RULESET, game["catalog"]) == []
+    pack["meta"]["region"] = "region.test_trial"
+    assert any("不屬於地區" in e for e in validate.validate_pack(pack, RULESET, game["catalog"]))
+    pack["meta"]["region"] = "region.nowhere"
+    assert any("region.nowhere" in e for e in validate.validate_pack(pack, RULESET, game["catalog"]))

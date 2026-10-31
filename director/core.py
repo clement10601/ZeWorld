@@ -96,7 +96,7 @@ class Director:
                     pass
         return ids
 
-    def generate(self, state, save_id="", followup=None, hint=None):
+    def generate(self, state, save_id="", followup=None, hint=None, region=None):
         profile = build_profile(state, self.game["ruleset"])
         request = {"kind": "followup" if followup else "fresh"}
         if followup:
@@ -105,6 +105,9 @@ class Director:
                            note="The engine adds the waiting-days gate to the trigger itself.")
         if hint:
             request["hint"] = hint
+        if region:
+            request["region"] = region
+            request["region_note"] = "Set meta.region to this region and set the pack there."
         taken = self.taken_ids()
         messages = prompts.director_messages(self.game, state, profile, request, self.example, taken)
         errors = []
@@ -114,7 +117,7 @@ class Director:
             except LLMError as e:
                 raise DirectorError(f"LLM call failed: {e}") from e
             try:
-                pack = self.finalize(extract_json(reply), save_id, followup, taken)
+                pack = self.finalize(extract_json(reply), save_id, followup, taken, region)
                 errors = validate.validate_pack(pack, self.game["ruleset"], self.game["catalog"],
                                                 self.game.get("banned_words", ()))
                 bad = simplified_chars(pack_text(pack), self.game["language"])
@@ -129,7 +132,7 @@ class Director:
                                    {"role": "user", "content": prompts.repair_message(errors)}]
         raise DirectorError(f"pack still invalid after {self.max_retries} retries", errors)
 
-    def finalize(self, pack, save_id, followup, taken):
+    def finalize(self, pack, save_id, followup, taken, region=None):
         """引擎負責的欄位不交給模型：版本、作者、存檔歸屬、id 唯一性、後續劇情的等待天數。"""
         pack["schema_version"] = validate.SCHEMA["properties"]["schema_version"]["const"]
         meta = pack.setdefault("meta", {})
@@ -139,6 +142,8 @@ class Director:
             meta["created_at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             if save_id:
                 meta["personalized_for"] = save_id
+            if region:
+                meta["region"] = region
         name = re.sub(r"[^a-z0-9_]", "_", str(pack.get("id", "")).removeprefix("pack.").lower())[:32].strip("_") or "event"
         digest = hashlib.sha1(json.dumps(pack, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         n = 6

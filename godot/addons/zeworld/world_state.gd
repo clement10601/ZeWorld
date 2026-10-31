@@ -9,6 +9,7 @@ var day: int = 0
 var time_of_day: String = ""
 var tier_index: int = 0
 var map_tags: Array = []
+var region: String = ""         # 玩家目前所在地區 id；空字串表示遊戲不分地區
 
 var flags: Dictionary = {}
 var flag_days: Dictionary = {}   # flag key -> 設定當天的 day
@@ -82,7 +83,7 @@ func record_history(entry: Dictionary) -> void:
 
 func to_dict() -> Dictionary:
 	return {
-		"day": day, "time_of_day": time_of_day, "tier_index": tier_index, "map_tags": map_tags,
+		"day": day, "time_of_day": time_of_day, "tier_index": tier_index, "map_tags": map_tags, "region": region,
 		"flags": flags, "flag_days": flag_days, "karma": karma, "relations": relations,
 		"kills": kills, "items": items, "memories": memories, "followups": followups,
 		"seen_packs": seen_packs, "history": history, "save_id": save_id,
