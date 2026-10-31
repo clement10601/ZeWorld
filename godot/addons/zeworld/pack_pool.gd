@@ -52,9 +52,16 @@ static func stock(pool: Array, state, region: String) -> Array:
 			return false
 		if state.seen_packs.has(p["id"]) and p["trigger"].get("once", true):
 			return false
+		if state.is_expired(p):
+			return false
 		var lo: int = state.tier_index_of(meta["tier_range"]["min"])
 		var hi: int = state.tier_index_of(meta["tier_range"]["max"])
 		return state.tier_index >= lo and state.tier_index <= hi)
+
+
+## 過期的內容包（遊戲可以把它們從池子與資料夾移掉）。
+static func expired(pool: Array, state) -> Array:
+	return pool.filter(func(p): return state.is_expired(p))
 
 
 ## 把導演產出的內容包存進資料夾（例如 user://generated），下次啟動用 load_dir 讀回。

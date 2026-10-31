@@ -71,6 +71,7 @@ python -m director serve --game ../Zetas/zeworld.json --out ../Zetas/.generated
 
 - `POST /v1/packs/generate`：送世界狀態與後續劇情請求，回傳通過驗證的內容包。引擎會改寫 id、標記 `personalized_for`，並把「等 after_days 天」的條件加進觸發器（執行器在 `request_followup` 時會立 `followup:<內容包 id>` 旗標）。
 - 帶 `region` 的請求是補貨：導演把內容包設在該地區（引擎強制寫入 `meta.region`）。
+- 請求可再帶 `tag`、`gate`、`expires_after_days`，都由引擎寫入，不靠模型：`tag` 進 `meta.request_tag`（讓遊戲認出是哪種請求，例如 `heart_demon`、`encounter`）；`gate` 是加在觸發器最前面的條件（例如 `[{"type": "tier_up", "to": "金丹"}]`）；`expires_after_days` 是進池後有效天數。遊戲收到導演的內容包時呼叫 `state.note_arrival(id)`，過期的內容包不再觸發也不算存貨（`PackPool.expired` 列出可清掉的）。
 - 內容包結束時執行器會寫一筆因果紀錄到 `state.history`（標題、結局、玩家選了什麼），導演側寫帶最近 8 筆。
 - `POST /v1/dialogue/rewrite`：依 NPC 設定、對玩家的記憶與關係、上一句對白改寫一句台詞；失敗、空白、過長（超過原句 1.5 倍）或繁中遊戲混進簡體字都退回原句。模型多加的旁白（「某某冷笑道：」）與引號會先去掉。
 - 遊戲語言是繁體中文時（`language` 以 `zh-Hant` 開頭或含「繁體」），內容包裡的簡體字會當成驗證錯誤丟回導演重寫。字表在 `director/data/zh_simplified_only.txt`（由 OpenCC 產生，排除「里、伙、群」這類繁中也用的字）。

@@ -96,7 +96,10 @@ class Director:
                     pass
         return ids
 
-    def generate(self, state, save_id="", followup=None, hint=None, region=None):
+    def generate(self, state, save_id="", followup=None, hint=None, region=None,
+                 tag=None, gate=None, expires_after_days=None):
+        """tag、gate、expires_after_days 由遊戲指定、引擎強制寫入：
+        tag 寫進 meta.request_tag，gate 是加在觸發器最前面的條件，expires_after_days 是有效天數。"""
         profile = build_profile(state, self.game["ruleset"])
         request = {"kind": "followup" if followup else "fresh"}
         if followup:
@@ -108,6 +111,12 @@ class Director:
         if region:
             request["region"] = region
             request["region_note"] = "Set meta.region to this region and set the pack there."
+        if gate:
+            request["required_trigger"] = gate
+            request["trigger_note"] = "The engine adds required_trigger to trigger.all itself; write the event for that moment."
+        if expires_after_days:
+            request["expires_after_days"] = expires_after_days
+            request["expiry_note"] = "The pack is only available for this many in-game days after it is delivered."
         taken = self.taken_ids()
         messages = prompts.director_messages(self.game, state, profile, request, self.example, taken)
         errors = []
@@ -117,7 +126,8 @@ class Director:
             except LLMError as e:
                 raise DirectorError(f"LLM call failed: {e}") from e
             try:
-                pack = self.finalize(extract_json(reply), save_id, followup, taken, region)
+                pack = self.finalize(extract_json(reply), save_id, followup, taken, region,
+                                     tag, gate, expires_after_days)
                 errors = validate.validate_pack(pack, self.game["ruleset"], self.game["catalog"],
                                                 self.game.get("banned_words", ()))
                 bad = simplified_chars(pack_text(pack), self.game["language"])
@@ -132,7 +142,7 @@ class Director:
                                    {"role": "user", "content": prompts.repair_message(errors)}]
         raise DirectorError(f"pack still invalid after {self.max_retries} retries", errors)
 
-    def finalize(self, pack, save_id, followup, taken, region=None):
+    def finalize(self, pack, save_id, followup, taken, region=None, tag=None, gate=None, expires_after_days=None):
         """引擎負責的欄位不交給模型：版本、作者、存檔歸屬、id 唯一性、後續劇情的等待天數。"""
         pack["schema_version"] = validate.SCHEMA["properties"]["schema_version"]["const"]
         meta = pack.setdefault("meta", {})
@@ -144,6 +154,8 @@ class Director:
                 meta["personalized_for"] = save_id
             if region:
                 meta["region"] = region
+            if tag:
+                meta["request_tag"] = tag
         name = re.sub(r"[^a-z0-9_]", "_", str(pack.get("id", "")).removeprefix("pack.").lower())[:32].strip("_") or "event"
         digest = hashlib.sha1(json.dumps(pack, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         n = 6
@@ -153,8 +165,10 @@ class Director:
         trig = pack.get("trigger")
         if isinstance(trig, dict) and isinstance(trig.get("all"), list):
             trig["once"] = True
-            gate = [c for c in followup_gate(followup) if c not in trig["all"]]
-            trig["all"][:0] = gate
+            required = [c for c in followup_gate(followup) + list(gate or []) if c not in trig["all"]]
+            trig["all"][:0] = required
+            if expires_after_days:
+                trig["expires_after_days"] = int(expires_after_days)
         return pack
 
     def _save(self, pack):

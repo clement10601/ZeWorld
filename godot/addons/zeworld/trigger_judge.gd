@@ -30,6 +30,8 @@ static func _eligible(pack: Dictionary, state, event: Dictionary) -> bool:
 		var cooldown_days := ceili(float(trig.get("cooldown_hours", 0)) / 24.0)
 		if state.day - int(state.seen_packs[id]) < cooldown_days:
 			return false
+	if state.is_expired(pack):
+		return false
 	# 標了地區的內容包只在該地區上場；玩家沒有地區（遊戲不分地區）時不篩
 	var region: String = pack["meta"].get("region", "")
 	if region != "" and state.region != "" and region != state.region:
