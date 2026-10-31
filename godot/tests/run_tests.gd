@@ -6,6 +6,7 @@ const WorldState = preload("res://addons/zeworld/world_state.gd")
 const PackRunner = preload("res://addons/zeworld/pack_runner.gd")
 const TriggerJudge = preload("res://addons/zeworld/trigger_judge.gd")
 const PackPool = preload("res://addons/zeworld/pack_pool.gd")
+const AssetLibrary = preload("res://addons/zeworld/asset_library.gd")
 
 var fixtures := ProjectSettings.globalize_path("res://").path_join("../content-pack/fixtures")
 var ruleset: Dictionary
@@ -33,6 +34,7 @@ func _initialize() -> void:
 		"test_region_filter_and_stock",
 		"test_generated_pack_expires",
 		"test_abort_and_game_data",
+		"test_asset_library",
 	]:
 		call(t)
 	print("%d checks, %d failed" % [checks, failures])
@@ -328,3 +330,33 @@ func test_abort_and_game_data() -> void:
 	var t = WorldState.new(ruleset)
 	t.load_dict(s.to_dict())
 	expect(t.game_data.get("exp") == 42, "game data round-trips")
+
+
+func test_asset_library() -> void:
+	var dir := "user://zeworld_test_art"
+	DirAccess.make_dir_recursive_absolute(dir)
+	for n in ["a.png", "b.png", "generic.png"]:
+		Image.create(4, 8, false, Image.FORMAT_RGBA8).save_png(dir.path_join(n))
+	var manifest := dir.path_join("assets.json")
+	var f := FileAccess.open(manifest, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"assets": {
+		"npc.fox": {"type": "sprite", "files": ["a.png", "b.png"], "height": 120},
+		"npc.generic": {"type": "sprite", "files": ["generic.png"]},
+		"npc.todo": {"type": "sprite", "files": ["todo.png"]},
+	}}))
+	f.close()
+	var lib = AssetLibrary.from_file(manifest)
+	expect(lib.root == dir, "root defaults to the manifest folder")
+	var first: String = lib.resolve("npc.fox", "npc.baiheng")
+	expect(first != "" and lib.resolve("npc.fox", "npc.baiheng") == first, "same key always gets the same variant")
+	var picks := {}
+	for k in ["k1", "k2", "k3", "k4", "k5", "k6"]:
+		picks[lib.resolve("npc.fox", k)] = true
+	expect(picks.size() == 2, "different keys spread over the variants")
+	expect(lib.resolve("npc.todo", "", "npc.generic").ends_with("generic.png"), "missing art falls back")
+	expect(lib.resolve("npc.todo") == "" and lib.texture("npc.todo") == null, "no art and no fallback gives nothing")
+	expect(lib.texture("npc.fox", "x") is Texture2D and lib.texture("npc.fox", "x").get_height() == 8, "texture loads from user://")
+	expect(lib.missing() == ["npc.todo"], "missing lists ids without any file")
+	expect(AssetLibrary.from_file("user://nope.json").assets.is_empty(), "missing manifest gives an empty library")
+	for n in ["a.png", "b.png", "generic.png", "assets.json"]:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(dir.path_join(n)))
