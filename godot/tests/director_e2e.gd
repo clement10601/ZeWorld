@@ -1,5 +1,5 @@
 ## 導演用戶端端到端測試：連真的 director/server.py（假模型）。
-## 由 director/test_e2e_godot.py 啟動服務並設定 ZEWORLD_DIRECTOR_URL 後執行。
+## 由 director/test_e2e_godot.py 啟動服務（要存取碼）並設定 ZEWORLD_DIRECTOR_URL、ZEWORLD_DIRECTOR_CODE 後執行。
 extends SceneTree
 
 const WorldState = preload("res://addons/zeworld/world_state.gd")
@@ -52,6 +52,14 @@ func _run() -> void:
 	await client.pack_generated
 	await process_frame
 	expect(client.restocking("region.test_town") == 0, "in-flight count drops when packs arrive")
+
+	var code: String = client.access_code
+	expect(code.begins_with("zw-"), "access code read from ZEWORLD_DIRECTOR_CODE")
+	client.access_code = "zw-wrong"
+	client.request_pack(state)
+	var denied: Array = await client.pack_failed
+	expect(str(denied[1]).begins_with("HTTP 401"), "wrong access code is refused")
+	client.access_code = code
 
 	client.base_url = "http://127.0.0.1:9"
 	expect(client.restock(state, [], 1) == 1, "restock retries while stock is short")

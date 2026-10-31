@@ -1,6 +1,7 @@
 ## 導演服務（ZeWorld director/server.py）的用戶端。加進場景樹後使用。
 ## 連不上、逾時、回覆不合格都只發失敗訊號，遊戲照常用預寫內容進行。
 ## 服務位址：環境變數 ZEWORLD_DIRECTOR_URL，預設 http://127.0.0.1:8765。
+## 導演要存取碼時（架在網路上給測試者用），設 access_code 或環境變數 ZEWORLD_DIRECTOR_CODE。
 extends Node
 
 const PackPool = preload("res://addons/zeworld/pack_pool.gd")
@@ -12,6 +13,7 @@ signal pack_failed(followup: Dictionary, reason: String)
 signal line_rewritten(node_id: String, text: String)
 
 var base_url := "http://127.0.0.1:8765"
+var access_code := ""
 var pack_timeout_sec := 90.0
 var rewrite_timeout_sec := 4.0
 ## 補貨失敗後，同一地區等這麼久才再請求
@@ -25,6 +27,9 @@ func _ready() -> void:
 	var env := OS.get_environment("ZEWORLD_DIRECTOR_URL")
 	if env != "":
 		base_url = env
+	var code := OS.get_environment("ZEWORLD_DIRECTOR_CODE")
+	if code != "":
+		access_code = code
 
 
 ## options（選用）：tag 寫進 meta.request_tag，gate 是加在觸發器最前面的條件陣列，
@@ -94,7 +99,10 @@ func _post(path: String, body: Dictionary, timeout: float, done: Callable) -> vo
 			done.call(0, null)
 		else:
 			done.call(code, JSON.parse_string(bytes.get_string_from_utf8())))
-	var err := http.request(base_url + path, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(body))
+	var headers := ["Content-Type: application/json"]
+	if access_code != "":
+		headers.append("Authorization: Bearer " + access_code)
+	var err := http.request(base_url + path, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
 	if err != OK:
 		http.queue_free()
 		done.call(0, null)

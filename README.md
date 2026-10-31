@@ -77,6 +77,24 @@ python -m director serve --game ../Zetas/zeworld.json --out ../Zetas/.generated
 - 遊戲語言是繁體中文時（`language` 以 `zh-Hant` 開頭或含「繁體」），內容包裡的簡體字會當成驗證錯誤丟回導演重寫。字表在 `director/data/zh_simplified_only.txt`（由 OpenCC 產生，排除「里、伙、群」這類繁中也用的字）。
 - Claude API 的系統提示與範例包有標提示快取，連續生成時大部分輸入 token 走快取價。
 
+### 架在網路上給測試者用：存取碼與用量上限
+
+導演預設只聽 `127.0.0.1`。要給別台電腦連時，必須用存取碼，否則不肯啟動。存取碼檔只存雜湊，存取碼在新增時印一次：
+
+```sh
+python -m director.access add --file ~/zeworld-codes.json --name 阿明              # 預設每天 40 個事件、800 句台詞
+python -m director.access add --file ~/zeworld-codes.json --name 小寶 --daily-packs 20
+python -m director.access total --file ~/zeworld-codes.json --daily-packs 200     # 所有人合計的每日事件上限（預設 200）
+python -m director.access list --file ~/zeworld-codes.json                        # 今天的用量
+python -m director.access disable --file ~/zeworld-codes.json --name 阿明          # 停用（enable 恢復）
+python -m director serve --game ../Zetas/zeworld.json --host 0.0.0.0 --access-codes ~/zeworld-codes.json
+```
+
+- 存取碼檔也可以用環境變數 `ZEWORLD_DIRECTOR_ACCESS_CODES` 指定。不要放進版控。用量記在旁邊的 `<檔名>.usage.json`，以 UTC 日期分天。
+- 遊戲送 `Authorization: Bearer <存取碼>`（`director_client.gd` 的 `access_code`，或環境變數 `ZEWORLD_DIRECTOR_CODE`）。沒帶或無效回 401，超過個人或合計上限回 429。遊戲端兩者都當成導演失敗，照常用手寫內容。
+- 每次生成請求算一次（含驗證失敗的重寫，因為模型已經花了錢），台詞改寫每句算一次。
+- 存取碼走 HTTP 標頭，公開網路上請放在 HTTPS 後面（例如 Caddy 反向代理或 Cloudflare Tunnel），不要直接開 HTTP 埠。
+
 ### 用真模型實測 `director.bench`
 
 會花 API 額度，不在 CI 跑。情境檔放在遊戲 repo（例如 Zetas 的 `tests/director/scenarios.json`），每個情境是一份世界狀態、要處理的後續劇情請求，以及要試改寫的台詞。
